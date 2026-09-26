@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+.vs/
+runtime/
+local-data/
+output/
+*.user
+*.suo
+*.jpg
+*.jpeg
+*.png
+*.dcm
+*.zip
+*.tsv
