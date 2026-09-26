@@ -33,12 +33,56 @@ namespace AutoReport
             }).ToList();
         }
 
+        private sealed class ExtractionLine
+        {
+            public string Text;
+            public string Evidence;
+            public double Confidence;
+            public int LineIndex;
+        }
+
+        private static List<ExtractionLine> BuildExtractionLines(SourcePage page)
+        {
+            var indexed = page.Lines.Select((line, index) => new { Line = line, Index = index }).ToList();
+            // PaddleOCR returns table cells as separate blocks. Rebuild visual rows from bounding boxes
+            // before applying regex rules so "RI" and "0.64" can be matched on the same row.
+            if (indexed.Count < 2 || indexed.Count(x => x.Line.Height > 0 || x.Line.Width > 0) < 2)
+                return indexed.Select(x => new ExtractionLine { Text = x.Line.Text ?? "", Evidence = x.Line.Text,
+                    Confidence = x.Line.Confidence, LineIndex = x.Index }).ToList();
+
+            var rows = new List<List<dynamic>>();
+            foreach (var item in indexed.OrderBy(x => x.Line.Y + x.Line.Height / 2.0))
+            {
+                double center = item.Line.Y + item.Line.Height / 2.0;
+                List<dynamic> best = null;
+                double bestDistance = double.MaxValue;
+                foreach (var row in rows)
+                {
+                    double rowCenter = row.Average(x => (double)x.Line.Y + (double)x.Line.Height / 2.0);
+                    double rowHeight = Math.Max(1.0, row.Average(x => (double)Math.Max(1, x.Line.Height)));
+                    double tolerance = Math.Max(4.0, Math.Max(rowHeight, Math.Max(1, item.Line.Height)) * 0.60);
+                    double distance = Math.Abs(center - rowCenter);
+                    if (distance <= tolerance && distance < bestDistance) { best = row; bestDistance = distance; }
+                }
+                if (best == null) { best = new List<dynamic>(); rows.Add(best); }
+                best.Add(item);
+            }
+
+            return rows.Select(row =>
+            {
+                var ordered = row.OrderBy(x => (int)x.Line.X).ToList();
+                string text = string.Join(" ", ordered.Select(x => (string)(x.Line.Text ?? "")).Where(x => !string.IsNullOrWhiteSpace(x)));
+                return new ExtractionLine { Text = text, Evidence = text,
+                    Confidence = ordered.Count == 0 ? 0 : ordered.Min(x => (double)x.Line.Confidence),
+                    LineIndex = ordered.Count == 0 ? 0 : ordered.Min(x => (int)x.Index) };
+            }).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+        }
+
         public List<Observation> Extract(SourcePage page)
         {
             var result = new List<Observation>();
-            for (int i = 0; i < page.Lines.Count; i++)
+            foreach (var line in BuildExtractionLines(page))
             {
-                var line = page.Lines[i];
                 var normalized = NormalizeDigits(line.Text ?? "");
                 foreach (var pair in rules)
                 {
@@ -48,11 +92,10 @@ namespace AutoReport
                         if (value.Length == 0) continue;
                         var unit = match.Groups["unit"].Value.Trim().ToLowerInvariant();
                         var observation = new Observation { Key = pair.Key.Key, Value = value, Unit = unit,
-                            SourceId = page.Id, LineIndex = i, Evidence = line.Text, Confidence = line.Confidence };
+                            SourceId = page.Id, LineIndex = line.LineIndex, Evidence = line.Evidence, Confidence = line.Confidence };
                         if (line.Confidence < profile.LowConfidenceThreshold) observation.Warnings.Add("LowOcrConfidence");
                         if (!string.IsNullOrEmpty(pair.Key.RequiredUnit) && !Units.Compatible(unit, pair.Key.RequiredUnit))
                             observation.Warnings.Add("MissingOrUnexpectedUnit");
-                        // Every candidate remains unreviewed, regardless of OCR confidence.
                         result.Add(observation);
                     }
                 }
