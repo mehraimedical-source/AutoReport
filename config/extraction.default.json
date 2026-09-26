@@ -130,6 +130,36 @@
       "Key": "Doppler.Unspecified.EDV",
       "Pattern": "^\\s*EDV\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>cm/s|m/s)\\b",
       "RequiredUnit": "cm/s"
+    },
+    {
+      "Key": "Doppler.Unspecified.PGmean",
+      "Pattern": "^\\s*PGmean\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\b(?:.*?\\b(?<unit>mmHg)\\b)?",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.D_S",
+      "Pattern": "^\\s*D/S\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)(?![\\d.])",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.AccT",
+      "Pattern": "^\\s*AccT\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\b(?:.*?\\b(?<unit>ms)\\b)?",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.Acc",
+      "Pattern": "^\\s*Acc\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.DecT",
+      "Pattern": "^\\s*DecT\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\b(?:.*?\\b(?<unit>ms)\\b)?",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.Dec",
+      "Pattern": "^\\s*Dec\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)",
+      "RequiredUnit": null
     }
   ]
 }
