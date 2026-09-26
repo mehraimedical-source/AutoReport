@@ -7,7 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../AutoReport.Core/AutoReport.Core.csproj" />
-    <PackageReference Include="PaddleOCRSharp" Version="6.2.0" />
+    <PackageReference Include="PaddleOCRSharp.Full" Version="6.2.0" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
   </ItemGroup>
