@@ -156,7 +156,7 @@ namespace AutoReport.Tests
             var options = new TesseractOptions { ExecutablePath = typeof(Program).Assembly.Location,
                 TessdataDirectory = folder, IncludeYellowTextPass = true, TimeoutSeconds = 15 };
             var pages = await new TesseractReader(options).ReadAsync(image, CancellationToken.None);
-            Check(pages.Count == 1 && pages[0].Lines.Single().Text == "BPD", "Adapter handles Unicode paths, stderr pipe pressure and grayscale pass.");
+            Check(pages.Count == 2 && pages.All(p => p.Lines.Single().Text == "BPD"), "Adapter handles Unicode paths, stderr pipe pressure, original and grayscale passes.");
             options.Languages = "timeout"; options.TimeoutSeconds = 1;
             try { await new TesseractReader(options).ReadAsync(image, CancellationToken.None); throw new Exception("Timeout ignored."); }
             catch (TimeoutException) { count++; }

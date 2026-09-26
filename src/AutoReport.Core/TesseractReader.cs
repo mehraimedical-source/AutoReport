@@ -22,6 +22,7 @@ namespace AutoReport
         public string Languages { get; set; } = "eng";
         public int TimeoutSeconds { get; set; } = 60;
         public int Threads { get; set; } = 1;
+        public bool IncludeOriginalPass { get; set; } = true;
         public bool IncludeYellowTextPass { get; set; } = true;
     }
 
@@ -50,6 +51,11 @@ namespace AutoReport
             try
             {
                 var result = new List<SourcePage>();
+                if (options.IncludeOriginalPass)
+                {
+                    string originalTsv = await RunAsync(Path.GetFullPath(imagePath), 6, cancellationToken).ConfigureAwait(false);
+                    result.Add(new SourcePage { Engine = "Tesseract TSV", Pass = "original/psm6", Lines = ParseTsv(originalTsv) });
+                }
                 foreach (bool yellow in options.IncludeYellowTextPass ? new[] { false, true } : new[] { false })
                 {
                     cancellationToken.ThrowIfCancellationRequested();

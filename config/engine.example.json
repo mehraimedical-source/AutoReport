@@ -4,5 +4,6 @@
   "Languages": "eng",
   "TimeoutSeconds": 60,
   "Threads": 1,
+  "IncludeOriginalPass": true,
   "IncludeYellowTextPass": true
 }
