@@ -10,5 +10,6 @@
     <PackageReference Include="PaddleOCRSharp.Full" Version="6.2.0" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+    <Content Include="../../config/extraction.default.json" Link="config/extraction.default.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
