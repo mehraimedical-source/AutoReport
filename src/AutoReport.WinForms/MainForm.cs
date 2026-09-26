@@ -97,39 +97,11 @@ namespace AutoReport.WinForms
             return null;
         }
 
-        private static string FindTesseract(string baseDir, string repoRoot)
-        {
-            var candidates = new[] {
-                Path.Combine(baseDir, "runtime", "tesseract.exe"),
-                repoRoot == null ? null : Path.Combine(repoRoot, "runtime", "tesseract.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Tesseract-OCR", "tesseract.exe"),
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Tesseract-OCR", "tesseract.exe")
-            };
-            return candidates.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x) && File.Exists(x));
-        }
-
-        private static TesseractOptions AutoOptions(string baseDir, string repoRoot)
-        {
-            string exe = FindTesseract(baseDir, repoRoot);
-            if (exe == null)
-                throw new FileNotFoundException("Tesseract was not found. Put the Tesseract runtime folder next to AutoReport.WinForms.exe or install Tesseract-OCR in Program Files.");
-
-            string runtime = Path.GetDirectoryName(exe);
-            string tessdata = Path.Combine(runtime, "tessdata");
-            if (!File.Exists(Path.Combine(tessdata, "eng.traineddata")))
-                throw new FileNotFoundException("eng.traineddata was not found in " + tessdata);
-
-            return new TesseractOptions {
-                ExecutablePath = exe, TessdataDirectory = tessdata, Languages = "eng",
-                TimeoutSeconds = 60, Threads = 1, IncludeOriginalPass = true, IncludeYellowTextPass = true
-            };
-        }
-
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
             runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); rawText.Clear(); warnings.Clear();
-            status.Text = "Running OCR...";
+            status.Text = "Running PaddleOCR...";
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
