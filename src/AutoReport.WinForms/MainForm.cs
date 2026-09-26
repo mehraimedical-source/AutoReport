@@ -110,9 +110,12 @@ namespace AutoReport.WinForms
                     Path.Combine(repoRoot, "config", "extraction.default.json");
                 if (!File.Exists(rules)) throw new FileNotFoundException("extraction.default.json was not found. Keep the config folder with the application.");
 
-                var engine = new AutoReportEngine(new TesseractReader(AutoOptions(baseDir, repoRoot)), JsonFile.Read<ExtractionProfile>(rules));
-                lastStudy = await engine.ExtractAsync("gui-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"),
-                    new[] { imagePath.Text }, CancellationToken.None);
+                using (var reader = new PaddleOcrReader())
+                {
+                    var engine = new AutoReportEngine(reader, JsonFile.Read<ExtractionProfile>(rules));
+                    lastStudy = await engine.ExtractAsync("gui-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"),
+                        new[] { imagePath.Text }, CancellationToken.None);
+                }
 
                 foreach (var item in lastStudy.Observations)
                     observations.Rows.Add(item.Key, item.Value, item.Unit, item.Confidence.ToString("0.0"),
