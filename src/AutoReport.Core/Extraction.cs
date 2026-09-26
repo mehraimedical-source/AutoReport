@@ -50,31 +50,31 @@ namespace AutoReport
                 return indexed.Select(x => new ExtractionLine { Text = x.Line.Text ?? "", Evidence = x.Line.Text,
                     Confidence = x.Line.Confidence, LineIndex = x.Index }).ToList();
 
-            var rows = new List<List<dynamic>>();
+            var rows = new List<List<Tuple<TextLine, int>>>();
             foreach (var item in indexed.OrderBy(x => x.Line.Y + x.Line.Height / 2.0))
             {
                 double center = item.Line.Y + item.Line.Height / 2.0;
-                List<dynamic> best = null;
+                List<Tuple<TextLine, int>> best = null;
                 double bestDistance = double.MaxValue;
                 foreach (var row in rows)
                 {
-                    double rowCenter = row.Average(x => (double)x.Line.Y + (double)x.Line.Height / 2.0);
-                    double rowHeight = Math.Max(1.0, row.Average(x => (double)Math.Max(1, x.Line.Height)));
+                    double rowCenter = row.Average(x => (double)x.Item1.Y + (double)x.Item1.Height / 2.0);
+                    double rowHeight = Math.Max(1.0, row.Average(x => (double)Math.Max(1, x.Item1.Height)));
                     double tolerance = Math.Max(4.0, Math.Max(rowHeight, Math.Max(1, item.Line.Height)) * 0.60);
                     double distance = Math.Abs(center - rowCenter);
                     if (distance <= tolerance && distance < bestDistance) { best = row; bestDistance = distance; }
                 }
-                if (best == null) { best = new List<dynamic>(); rows.Add(best); }
-                best.Add(item);
+                if (best == null) { best = new List<Tuple<TextLine, int>>(); rows.Add(best); }
+                best.Add(Tuple.Create(item.Line, item.Index));
             }
 
             return rows.Select(row =>
             {
-                var ordered = row.OrderBy(x => (int)x.Line.X).ToList();
-                string text = string.Join(" ", ordered.Select(x => (string)(x.Line.Text ?? "")).Where(x => !string.IsNullOrWhiteSpace(x)));
+                var ordered = row.OrderBy(x => x.Item1.X).ToList();
+                string text = string.Join(" ", ordered.Select(x => x.Item1.Text ?? "").Where(x => !string.IsNullOrWhiteSpace(x)));
                 return new ExtractionLine { Text = text, Evidence = text,
-                    Confidence = ordered.Count == 0 ? 0 : ordered.Min(x => (double)x.Line.Confidence),
-                    LineIndex = ordered.Count == 0 ? 0 : ordered.Min(x => (int)x.Index) };
+                    Confidence = ordered.Count == 0 ? 0 : ordered.Min(x => x.Item1.Confidence),
+                    LineIndex = ordered.Count == 0 ? 0 : ordered.Min(x => x.Item2) };
             }).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
         }
 
