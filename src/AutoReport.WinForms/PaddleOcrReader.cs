@@ -1,30 +1,58 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-using PaddleOCRSharp;
 
 namespace AutoReport.WinForms
 {
     internal sealed class PaddleOcrReader : IImageTextReader, IDisposable
     {
-        private readonly PaddleOCREngine engine;
+        private readonly object engine;
+        private readonly MethodInfo detectText;
 
         public PaddleOcrReader()
         {
-            var parameter = new OCRParameter
-            {
-                cpu_math_library_num_threads = Math.Max(1, Math.Min(4, Environment.ProcessorCount)),
-                enable_mkldnn = true,
-                cls = false,
-                use_angle_cls = false,
-                det_db_score_mode = true,
-                det_db_unclip_ratio = 1.6f,
-                max_side_len = 2000
-            };
-            engine = new PaddleOCREngine(null, parameter);
+            var asm = Assembly.Load("PaddleOCRSharp");
+            var engineType = asm.GetType("PaddleOCRSharp.PaddleOCREngine", true);
+            var configType = asm.GetType("PaddleOCRSharp.OCRModelConfig", true);
+            var parameterType = asm.GetType("PaddleOCRSharp.OCRParameter", true);
+            var parameter = Activator.CreateInstance(parameterType);
+
+            Set(parameterType, parameter, "cpu_math_library_num_threads", Math.Max(1, Math.Min(4, Environment.ProcessorCount)));
+            Set(parameterType, parameter, "enable_mkldnn", true);
+            Set(parameterType, parameter, "cls", false);
+            Set(parameterType, parameter, "use_angle_cls", false);
+            Set(parameterType, parameter, "det_db_score_mode", true);
+            Set(parameterType, parameter, "det_db_unclip_ratio", 1.6f);
+            Set(parameterType, parameter, "max_side_len", 2000);
+
+            var ctor = engineType.GetConstructor(new[] { configType, parameterType });
+            if (ctor == null) throw new MissingMethodException("Compatible PaddleOCREngine constructor was not found.");
+            engine = ctor.Invoke(new[] { null, parameter });
+            detectText = engineType.GetMethod("DetectText", new[] { typeof(string) });
+            if (detectText == null) throw new MissingMethodException("PaddleOCR DetectText(string) was not found.");
+        }
+
+        private static void Set(Type type, object target, string name, object value)
+        {
+            var property = type.GetProperty(name);
+            if (property != null && property.CanWrite) { property.SetValue(target, value, null); return; }
+            var field = type.GetField(name);
+            if (field != null) field.SetValue(target, value);
+        }
+
+        private static object Get(object target, string name)
+        {
+            if (target == null) return null;
+            var type = target.GetType();
+            var property = type.GetProperty(name);
+            if (property != null) return property.GetValue(target, null);
+            var field = type.GetField(name);
+            return field == null ? null : field.GetValue(target);
         }
 
         public Task<IReadOnlyList<SourcePage>> ReadAsync(string imagePath, CancellationToken cancellationToken)
@@ -35,28 +63,34 @@ namespace AutoReport.WinForms
             return Task.Run<IReadOnlyList<SourcePage>>(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                OCRResult result = engine.DetectText(imagePath);
+                object result = detectText.Invoke(engine, new object[] { imagePath });
                 if (result == null) throw new InvalidOperationException("PaddleOCR returned no result.");
 
                 var page = new SourcePage { Engine = "PaddleOCRSharp", Pass = "paddle" };
-                foreach (var block in result.TextBlocks ?? Enumerable.Empty<TextBlock>())
+                var blocks = Get(result, "TextBlocks") as IEnumerable;
+                if (blocks != null)
                 {
-                    if (string.IsNullOrWhiteSpace(block.Text)) continue;
-                    int x = 0, y = 0, width = 0, height = 0;
-                    if (block.BoxPoints != null && block.BoxPoints.Count > 0)
+                    foreach (object block in blocks)
                     {
-                        int minX = block.BoxPoints.Min(p => p.X);
-                        int minY = block.BoxPoints.Min(p => p.Y);
-                        int maxX = block.BoxPoints.Max(p => p.X);
-                        int maxY = block.BoxPoints.Max(p => p.Y);
-                        x = minX; y = minY; width = Math.Max(0, maxX - minX); height = Math.Max(0, maxY - minY);
+                        string text = Convert.ToString(Get(block, "Text"));
+                        if (string.IsNullOrWhiteSpace(text)) continue;
+                        double confidence = Convert.ToDouble(Get(block, "Score") ?? 0) * 100.0;
+                        int minX = 0, minY = 0, maxX = 0, maxY = 0;
+                        bool first = true;
+                        var points = Get(block, "BoxPoints") as IEnumerable;
+                        if (points != null)
+                        {
+                            foreach (object point in points)
+                            {
+                                int x = Convert.ToInt32(Get(point, "X") ?? 0);
+                                int y = Convert.ToInt32(Get(point, "Y") ?? 0);
+                                if (first) { minX = maxX = x; minY = maxY = y; first = false; }
+                                else { minX = Math.Min(minX, x); minY = Math.Min(minY, y); maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y); }
+                            }
+                        }
+                        page.Lines.Add(new TextLine { Text = text, Confidence = confidence, X = minX, Y = minY,
+                            Width = first ? 0 : maxX - minX, Height = first ? 0 : maxY - minY });
                     }
-                    page.Lines.Add(new TextLine
-                    {
-                        Text = block.Text,
-                        Confidence = block.Score * 100.0,
-                        X = x, Y = y, Width = width, Height = height
-                    });
                 }
                 return new[] { page };
             }, cancellationToken);
@@ -64,7 +98,8 @@ namespace AutoReport.WinForms
 
         public void Dispose()
         {
-            engine.Dispose();
+            var disposable = engine as IDisposable;
+            if (disposable != null) disposable.Dispose();
         }
     }
 }
