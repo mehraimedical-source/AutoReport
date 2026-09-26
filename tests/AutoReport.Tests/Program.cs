@@ -20,12 +20,21 @@ namespace AutoReport.Tests
 
         private static int Main(string[] args)
         {
+            // Child-process fixture exercises real pipe draining, quoting, timeout and cancellation.
+            if (args.Length > 2 && args[1] == "stdout")
+            {
+                if (args.Contains("timeout")) Thread.Sleep(10000);
+                Console.Error.Write(new string('x', 100000));
+                Console.WriteLine("5\t1\t1\t1\t1\t1\t20\t40\t50\t20\t95\tBPD");
+                return 0;
+            }
             string temp = Path.Combine(Path.GetTempPath(), "AutoReport-tests-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(temp);
             try
             {
                 TestExtraction(args.Length > 0 ? args[0] : "config/extraction.default.json");
                 TestTsv(); TestTemplates(temp); TestPipeline(temp).GetAwaiter().GetResult();
+                TestProcessAdapter(temp).GetAwaiter().GetResult();
                 Console.WriteLine("PASS: " + count + " assertions."); return 0;
             }
             catch (Exception exception) { Console.Error.WriteLine(exception); return 1; }
@@ -131,6 +140,32 @@ namespace AutoReport.Tests
             var cancellation = new CancellationToken(true);
             try { await engine.ExtractAsync("single-exam", new[] { first }, cancellation); throw new Exception("Cancellation ignored."); }
             catch (OperationCanceledException) { count++; }
+        }
+
+        private static async Task TestProcessAdapter(string temp)
+        {
+            string folder = Path.Combine(temp, "مسیر دارای فاصله"); Directory.CreateDirectory(folder);
+            string image = Path.Combine(folder, "test image.png");
+            using (var bitmap = new System.Drawing.Bitmap(80, 60))
+            {
+                using (var graphics = System.Drawing.Graphics.FromImage(bitmap)) graphics.Clear(System.Drawing.Color.White);
+                bitmap.Save(image, System.Drawing.Imaging.ImageFormat.Png);
+            }
+            File.WriteAllText(Path.Combine(folder, "eng.traineddata"), "process fixture, not an OCR model");
+            File.WriteAllText(Path.Combine(folder, "timeout.traineddata"), "process fixture");
+            var options = new TesseractOptions { ExecutablePath = typeof(Program).Assembly.Location,
+                TessdataDirectory = folder, IncludeYellowTextPass = true, TimeoutSeconds = 15 };
+            var pages = await new TesseractReader(options).ReadAsync(image, CancellationToken.None);
+            Check(pages.Count == 1 && pages[0].Lines.Single().Text == "BPD", "Adapter handles Unicode paths, stderr pipe pressure and grayscale pass.");
+            options.Languages = "timeout"; options.TimeoutSeconds = 1;
+            try { await new TesseractReader(options).ReadAsync(image, CancellationToken.None); throw new Exception("Timeout ignored."); }
+            catch (TimeoutException) { count++; }
+            options.TimeoutSeconds = 15;
+            using (var cancel = new CancellationTokenSource(200))
+            {
+                try { await new TesseractReader(options).ReadAsync(image, cancel.Token); throw new Exception("Child cancellation ignored."); }
+                catch (OperationCanceledException) { count++; }
+            }
         }
 
         private static void CreateDoc(string path)

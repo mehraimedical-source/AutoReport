@@ -133,11 +133,11 @@ namespace AutoReport
             }
             return words.GroupBy(x => x.Group).Select(group => {
                 var list = group.OrderBy(x => x.X).ToList();
-                int x = list.Min(w => w.X), y = list.Min(w => w.Y);
+                int left = list.Min(w => w.X), top = list.Min(w => w.Y);
                 return new TextLine { Text = string.Join(" ", list.Select(w => w.Text)),
-                    Confidence = list.Min(w => w.Confidence), X = (int)(x / scale), Y = (int)(y / scale),
-                    Width = (int)((list.Max(w => w.X + w.W) - x) / scale),
-                    Height = (int)((list.Max(w => w.Y + w.H) - y) / scale) };
+                    Confidence = list.Min(w => w.Confidence), X = (int)(left / scale), Y = (int)(top / scale),
+                    Width = (int)((list.Max(w => w.X + w.W) - left) / scale),
+                    Height = (int)((list.Max(w => w.Y + w.H) - top) / scale) };
             }).OrderBy(x => x.Y).ThenBy(x => x.X).ToList();
         }
 
