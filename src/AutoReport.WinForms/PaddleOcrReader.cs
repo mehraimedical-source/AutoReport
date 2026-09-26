@@ -3,7 +3,8 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;\nusing System.Runtime.ExceptionServices;
+using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -32,7 +33,8 @@ namespace AutoReport.WinForms
 
             var ctor = engineType.GetConstructor(new[] { configType, parameterType });
             if (ctor == null) throw new MissingMethodException("Compatible PaddleOCREngine constructor was not found.");
-            try { engine = ctor.Invoke(new[] { null, parameter }); }\n            catch (TargetInvocationException ex) { ThrowInner(ex); throw; }
+            try { engine = ctor.Invoke(new[] { null, parameter }); }
+            catch (TargetInvocationException ex) { ThrowInner(ex); throw; }
             detectText = engineType.GetMethod("DetectText", new[] { typeof(string) });
             if (detectText == null) throw new MissingMethodException("PaddleOCR DetectText(string) was not found.");
         }
@@ -63,7 +65,9 @@ namespace AutoReport.WinForms
             return Task.Run<IReadOnlyList<SourcePage>>(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                object result;\n                try { result = detectText.Invoke(engine, new object[] { imagePath }); }\n                catch (TargetInvocationException ex) { ThrowInner(ex); throw; }
+                object result;
+                try { result = detectText.Invoke(engine, new object[] { imagePath }); }
+                catch (TargetInvocationException ex) { ThrowInner(ex); throw; }
                 if (result == null) throw new InvalidOperationException("PaddleOCR returned no result.");
 
                 var page = new SourcePage { Engine = "PaddleOCRSharp", Pass = "paddle" };
@@ -96,7 +100,12 @@ namespace AutoReport.WinForms
             }, cancellationToken);
         }
 
-        private static void ThrowInner(TargetInvocationException ex)\n        {\n            if (ex.InnerException != null) ExceptionDispatchInfo.Capture(ex.InnerException).Throw();\n        }\n\n        public void Dispose()
+        private static void ThrowInner(TargetInvocationException ex)
+        {
+            if (ex.InnerException != null) ExceptionDispatchInfo.Capture(ex.InnerException).Throw();
+        }
+
+        public void Dispose()
         {
             var disposable = engine as IDisposable;
             if (disposable != null) disposable.Dispose();
