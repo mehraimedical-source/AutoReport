@@ -68,7 +68,7 @@ namespace AutoReport
                 best.Add(Tuple.Create(item.Line, item.Index));
             }
 
-            return rows.Select(row =>
+            var result = rows.Select(row =>
             {
                 var ordered = row.OrderBy(x => x.Item1.X).ToList();
                 string text = string.Join(" ", ordered.Select(x => x.Item1.Text ?? "").Where(x => !string.IsNullOrWhiteSpace(x)));
@@ -76,6 +76,30 @@ namespace AutoReport
                     Confidence = ordered.Count == 0 ? 0 : ordered.Min(x => x.Item1.Confidence),
                     LineIndex = ordered.Count == 0 ? 0 : ordered.Min(x => x.Item2) };
             }).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+
+            // Some PaddleOCR builds expose each table cell as an independent block and their
+            // bounding boxes are not reliable enough to reconstruct rows. Add short sequential
+            // windows as a fallback: e.g. "RI" + "0.64" becomes "RI 0.64".
+            // Rules are anchored to known field labels, so unrelated OCR text is ignored.
+            for (int i = 0; i < indexed.Count; i++)
+            {
+                var parts = new List<string>();
+                double confidence = 100.0;
+                for (int j = i; j < indexed.Count && j < i + 4; j++)
+                {
+                    string part = indexed[j].Line.Text ?? "";
+                    if (string.IsNullOrWhiteSpace(part)) continue;
+                    parts.Add(part.Trim());
+                    confidence = Math.Min(confidence, indexed[j].Line.Confidence);
+                    if (parts.Count >= 2)
+                    {
+                        string text = string.Join(" ", parts);
+                        result.Add(new ExtractionLine { Text = text, Evidence = text,
+                            Confidence = confidence, LineIndex = indexed[i].Index });
+                    }
+                }
+            }
+            return result;
         }
 
         public List<Observation> Extract(SourcePage page)
