@@ -1,0 +1,27 @@
+name: Build and test NET Framework 4.8
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build library and CLI
+        run: msbuild src/AutoReport.Cli/AutoReport.Cli.csproj /restore /p:Configuration=Release
+      - name: Build regression tests
+        run: msbuild tests/AutoReport.Tests/AutoReport.Tests.csproj /restore /p:Configuration=Release
+      - name: Run regression tests
+        run: tests/AutoReport.Tests/bin/Release/net48/AutoReport.Tests.exe config/extraction.default.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoReport-net48
+          path: |
+            src/AutoReport.Cli/bin/Release/net48/
+            config/
+            README.md
+            docs/

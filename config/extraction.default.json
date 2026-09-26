@@ -1,0 +1,135 @@
+{
+  "Name": "Obstetric baseline v1 - requires validation per device",
+  "LowConfidenceThreshold": 85,
+  "Rules": [
+    {
+      "Key": "Obstetric.BPD",
+      "Pattern": "(?<![A-Za-z0-9*/])BPD(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.HC",
+      "Pattern": "(?<![A-Za-z0-9*/])HC(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.HCStar",
+      "Pattern": "(?<![A-Za-z0-9*/])HC\\*(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.AC",
+      "Pattern": "(?<![A-Za-z0-9*/])AC(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.FL",
+      "Pattern": "(?<![A-Za-z0-9*/])FL(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.OFD",
+      "Pattern": "(?<![A-Za-z0-9*/])OFD(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.CRL",
+      "Pattern": "(?<![A-Za-z0-9*/])CRL(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.NT",
+      "Pattern": "(?<![A-Za-z0-9*/])NT(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.AFI",
+      "Pattern": "(?<![A-Za-z0-9*/])AFI(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.Q1",
+      "Pattern": "(?<![A-Za-z0-9*/])Q1(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.Q2",
+      "Pattern": "(?<![A-Za-z0-9*/])Q2(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.Q3",
+      "Pattern": "(?<![A-Za-z0-9*/])Q3(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.Q4",
+      "Pattern": "(?<![A-Za-z0-9*/])Q4(?![A-Za-z*/])(?:\\s*\\([^)]*\\))?\\s*[^\\dA-Za-z\\r\\n]{0,12}(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>mm|cm)\\b",
+      "RequiredUnit": "mm"
+    },
+    {
+      "Key": "Obstetric.EFW",
+      "Pattern": "(?<![A-Za-z0-9/])EFW(?:\\s*\\([^)]*\\))?\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>kg|g)\\b",
+      "RequiredUnit": "g"
+    },
+    {
+      "Key": "Obstetric.EFW",
+      "Pattern": "^\\s*\\(?AC/BPD/FL/HC[\\s_)|]*(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>kg|g)\\b",
+      "RequiredUnit": "g"
+    },
+    {
+      "Key": "Obstetric.FHR",
+      "Pattern": "\\b(?:Fetal\\s+HR|FHR)\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>bpm)\\b",
+      "RequiredUnit": "bpm"
+    },
+    {
+      "Key": "Obstetric.GA.LMP",
+      "Pattern": "\\bGA\\s*\\(LMP\\)\\s*[|:]?\\s*(?<value>\\d{1,2}w\\s*[0-6]d)\\b"
+    },
+    {
+      "Key": "Obstetric.GA.AUA",
+      "Pattern": "\\bGA\\s*\\(AUA\\)\\s*[|:]?\\s*(?<value>\\d{1,2}w\\s*[0-6]d)\\b"
+    },
+    {
+      "Key": "Obstetric.GA.Displayed",
+      "Pattern": "^\\s*GA\\s*[|:]?\\s*(?<value>\\d{1,2}w\\s*[0-6]d)\\b"
+    },
+    {
+      "Key": "Obstetric.EDD.LMP",
+      "Pattern": "\\bEDD\\s*\\(LMP\\)\\s*[|:]?\\s*(?<value>\\d{2}[./-]\\d{2}[./-]\\d{4})\\b"
+    },
+    {
+      "Key": "Obstetric.EDD.AUA",
+      "Pattern": "\\bEDD\\s*\\(AUA\\)\\s*[|:]?\\s*(?<value>\\d{2}[./-]\\d{2}[./-]\\d{4})\\b"
+    },
+    {
+      "Key": "Obstetric.EDD.Displayed",
+      "Pattern": "^\\s*EDD\\s*[|:]?\\s*(?<value>\\d{2}[./-]\\d{2}[./-]\\d{4})\\b"
+    },
+    {
+      "Key": "Doppler.Unspecified.PI",
+      "Pattern": "^\\s*PI\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)(?![\\d.])",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.RI",
+      "Pattern": "^\\s*RI\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)(?![\\d.])",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.S_D",
+      "Pattern": "^\\s*S/D\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)(?![\\d.])",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.PSV",
+      "Pattern": "^\\s*PSV\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>cm/s|m/s)\\b",
+      "RequiredUnit": "cm/s"
+    },
+    {
+      "Key": "Doppler.Unspecified.EDV",
+      "Pattern": "^\\s*EDV\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)\\s*(?<unit>cm/s|m/s)\\b",
+      "RequiredUnit": "cm/s"
+    }
+  ]
+}

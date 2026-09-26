@@ -1,0 +1,8 @@
+{
+  "ExecutablePath": "C:\\AutoReport\\runtime\\tesseract.exe",
+  "TessdataDirectory": "C:\\AutoReport\\runtime\\tessdata",
+  "Languages": "eng",
+  "TimeoutSeconds": 60,
+  "Threads": 1,
+  "IncludeYellowTextPass": true
+}

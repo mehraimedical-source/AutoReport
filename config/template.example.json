@@ -1,0 +1,46 @@
+{
+  "CenterId": "example-center",
+  "TemplateVersion": "1",
+  "Bindings": [
+    {
+      "Token": "BPD",
+      "Key": "Obstetric.BPD",
+      "OutputUnit": "mm",
+      "IncludeUnit": true,
+      "NumberFormat": "0.##"
+    },
+    {
+      "Token": "HC",
+      "Key": "Obstetric.HC",
+      "OutputUnit": "mm",
+      "IncludeUnit": true,
+      "NumberFormat": "0.##"
+    },
+    {
+      "Token": "AC",
+      "Key": "Obstetric.AC",
+      "OutputUnit": "mm",
+      "IncludeUnit": true,
+      "NumberFormat": "0.##"
+    },
+    {
+      "Token": "FL",
+      "Key": "Obstetric.FL",
+      "OutputUnit": "mm",
+      "IncludeUnit": true,
+      "NumberFormat": "0.##"
+    },
+    {
+      "Token": "EFW",
+      "Key": "Obstetric.EFW",
+      "OutputUnit": "g",
+      "IncludeUnit": true,
+      "NumberFormat": "0.##"
+    },
+    {
+      "Token": "GA_LMP",
+      "Key": "Obstetric.GA.LMP",
+      "IncludeUnit": false
+    }
+  ]
+}
