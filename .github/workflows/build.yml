@@ -13,6 +13,8 @@ jobs:
       - uses: microsoft/setup-msbuild@v2
       - name: Build library and CLI
         run: msbuild src/AutoReport.Cli/AutoReport.Cli.csproj /restore /p:Configuration=Release
+      - name: Build WinForms test UI
+        run: msbuild src/AutoReport.WinForms/AutoReport.WinForms.csproj /restore /p:Configuration=Release
       - name: Build regression tests
         run: msbuild tests/AutoReport.Tests/AutoReport.Tests.csproj /restore /p:Configuration=Release
       - name: Run regression tests
@@ -22,6 +24,7 @@ jobs:
           name: AutoReport-net48
           path: |
             src/AutoReport.Cli/bin/Release/net48/
+            src/AutoReport.WinForms/bin/Release/net48/
             config/
             README.md
             docs/
