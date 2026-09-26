@@ -11,125 +11,67 @@ namespace AutoReport.WinForms
     public sealed class MainForm : Form
     {
         private readonly TextBox imagePath = new TextBox();
-        private readonly TextBox enginePath = new TextBox();
-        private readonly TextBox rulesPath = new TextBox();
         private readonly PictureBox preview = new PictureBox();
         private readonly DataGridView observations = new DataGridView();
         private readonly TextBox rawText = new TextBox();
         private readonly TextBox warnings = new TextBox();
+        private readonly Label status = new Label();
         private readonly Button runButton = new Button();
         private readonly Button saveButton = new Button();
         private Study lastStudy;
 
         public MainForm()
         {
-            Text = "AutoReport - Image OCR Test";
-            Width = 1200;
-            Height = 760;
-            StartPosition = FormStartPosition.CenterScreen;
+            Text = "AutoReport - Ultrasound OCR";
+            Width = 1200; Height = 760; StartPosition = FormStartPosition.CenterScreen;
 
             var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1 };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 125));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 86));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             Controls.Add(root);
 
-            var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 4, Padding = new Padding(8) };
-            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));
+            var top = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 5, RowCount = 2, Padding = new Padding(8) };
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 55));
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 95));
             top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
-            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 110));
+            top.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
             root.Controls.Add(top, 0, 0);
 
-            AddPathRow(top, 0, "Image", imagePath, "Browse...", BrowseImage);
-            AddPathRow(top, 1, "Engine JSON", enginePath, "Browse...", (s,e) => BrowseJson(enginePath));
-            AddPathRow(top, 2, "Rules JSON", rulesPath, "Browse...", (s,e) => BrowseJson(rulesPath));
+            top.Controls.Add(new Label { Text = "Image", TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, 0);
+            imagePath.Dock = DockStyle.Fill; imagePath.ReadOnly = true;
+            top.Controls.Add(imagePath, 1, 0);
+            var browse = new Button { Text = "Browse...", Dock = DockStyle.Fill };
+            browse.Click += BrowseImage; top.Controls.Add(browse, 2, 0);
+            runButton.Text = "Run OCR"; runButton.Dock = DockStyle.Fill;
+            runButton.Click += async (s,e) => await RunOcrAsync(); top.Controls.Add(runButton, 3, 0);
+            saveButton.Text = "Save JSON"; saveButton.Dock = DockStyle.Fill; saveButton.Enabled = false;
+            saveButton.Click += SaveJson; top.Controls.Add(saveButton, 4, 0);
 
-            runButton.Text = "Run OCR";
-            runButton.Dock = DockStyle.Fill;
-            runButton.Click += async (s, e) => await RunOcrAsync();
-            top.Controls.Add(runButton, 2, 3);
-
-            saveButton.Text = "Save JSON";
-            saveButton.Dock = DockStyle.Fill;
-            saveButton.Enabled = false;
-            saveButton.Click += SaveJson;
-            top.Controls.Add(saveButton, 3, 3);
+            status.Text = "Ready - select an ultrasound image.";
+            status.TextAlign = ContentAlignment.MiddleLeft; status.Dock = DockStyle.Fill;
+            top.Controls.Add(status, 0, 1); top.SetColumnSpan(status, 5);
 
             var split = new SplitContainer { Dock = DockStyle.Fill, SplitterDistance = 430 };
             root.Controls.Add(split, 0, 1);
-
-            preview.Dock = DockStyle.Fill;
-            preview.SizeMode = PictureBoxSizeMode.Zoom;
-            preview.BorderStyle = BorderStyle.FixedSingle;
+            preview.Dock = DockStyle.Fill; preview.SizeMode = PictureBoxSizeMode.Zoom; preview.BorderStyle = BorderStyle.FixedSingle;
             split.Panel1.Controls.Add(preview);
 
-            var tabs = new TabControl { Dock = DockStyle.Fill };
-            split.Panel2.Controls.Add(tabs);
-
+            var tabs = new TabControl { Dock = DockStyle.Fill }; split.Panel2.Controls.Add(tabs);
             var resultTab = new TabPage("Extracted fields");
-            observations.Dock = DockStyle.Fill;
-            observations.ReadOnly = true;
-            observations.AllowUserToAddRows = false;
-            observations.AllowUserToDeleteRows = false;
-            observations.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            observations.Columns.Add("Key", "Field");
-            observations.Columns.Add("Value", "Value");
-            observations.Columns.Add("Unit", "Unit");
-            observations.Columns.Add("Confidence", "OCR confidence");
-            observations.Columns.Add("Evidence", "Evidence");
-            observations.Columns.Add("Warnings", "Warnings");
-            resultTab.Controls.Add(observations);
-            tabs.TabPages.Add(resultTab);
+            observations.Dock = DockStyle.Fill; observations.ReadOnly = true; observations.AllowUserToAddRows = false;
+            observations.AllowUserToDeleteRows = false; observations.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            observations.Columns.Add("Key","Field"); observations.Columns.Add("Value","Value"); observations.Columns.Add("Unit","Unit");
+            observations.Columns.Add("Confidence","OCR confidence"); observations.Columns.Add("Evidence","Evidence"); observations.Columns.Add("Warnings","Warnings");
+            resultTab.Controls.Add(observations); tabs.TabPages.Add(resultTab);
 
             var textTab = new TabPage("Raw OCR text");
-            rawText.Dock = DockStyle.Fill;
-            rawText.Multiline = true;
-            rawText.ScrollBars = ScrollBars.Both;
-            rawText.ReadOnly = true;
-            rawText.Font = new Font(FontFamily.GenericMonospace, 10);
-            textTab.Controls.Add(rawText);
-            tabs.TabPages.Add(textTab);
+            rawText.Dock = DockStyle.Fill; rawText.Multiline = true; rawText.ScrollBars = ScrollBars.Both; rawText.ReadOnly = true;
+            rawText.Font = new Font(FontFamily.GenericMonospace, 10); textTab.Controls.Add(rawText); tabs.TabPages.Add(textTab);
 
             var warningTab = new TabPage("Warnings");
-            warnings.Dock = DockStyle.Fill;
-            warnings.Multiline = true;
-            warnings.ScrollBars = ScrollBars.Vertical;
-            warnings.ReadOnly = true;
-            warningTab.Controls.Add(warnings);
-            tabs.TabPages.Add(warningTab);
-
-            var baseDir = AppDomain.CurrentDomain.BaseDirectory;
-            var repoRoot = FindRepoRoot(baseDir);
-            if (repoRoot != null)
-            {
-                rulesPath.Text = Path.Combine(repoRoot, "config", "extraction.default.json");
-                enginePath.Text = Path.Combine(repoRoot, "config", "engine.json");
-                if (!File.Exists(enginePath.Text))
-                    enginePath.Text = Path.Combine(repoRoot, "config", "engine.example.json");
-            }
-        }
-
-        private static string FindRepoRoot(string start)
-        {
-            var dir = new DirectoryInfo(start);
-            while (dir != null)
-            {
-                if (Directory.Exists(Path.Combine(dir.FullName, "config")) &&
-                    Directory.Exists(Path.Combine(dir.FullName, "src"))) return dir.FullName;
-                dir = dir.Parent;
-            }
-            return null;
-        }
-
-        private static void AddPathRow(TableLayoutPanel panel, int row, string label, TextBox box, string buttonText, EventHandler click)
-        {
-            panel.Controls.Add(new Label { Text = label, TextAlign = ContentAlignment.MiddleLeft, Dock = DockStyle.Fill }, 0, row);
-            box.Dock = DockStyle.Fill;
-            panel.Controls.Add(box, 1, row);
-            panel.SetColumnSpan(box, 2);
-            var button = new Button { Text = buttonText, Dock = DockStyle.Fill };
-            button.Click += click;
-            panel.Controls.Add(button, 3, row);
+            warnings.Dock = DockStyle.Fill; warnings.Multiline = true; warnings.ScrollBars = ScrollBars.Vertical; warnings.ReadOnly = true;
+            warningTab.Controls.Add(warnings); tabs.TabPages.Add(warningTab);
         }
 
         private void BrowseImage(object sender, EventArgs e)
@@ -139,52 +81,82 @@ namespace AutoReport.WinForms
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
                 imagePath.Text = dialog.FileName;
                 if (preview.Image != null) { preview.Image.Dispose(); preview.Image = null; }
-                using (var source = Image.FromFile(dialog.FileName))
-                    preview.Image = new Bitmap(source);
+                using (var source = Image.FromFile(dialog.FileName)) preview.Image = new Bitmap(source);
+                status.Text = "Image selected. Click Run OCR.";
             }
         }
 
-        private void BrowseJson(TextBox target)
+        private static string FindRepoRoot(string start)
         {
-            using (var dialog = new OpenFileDialog { Filter = "JSON files|*.json|All files|*.*" })
-                if (dialog.ShowDialog(this) == DialogResult.OK) target.Text = dialog.FileName;
+            var dir = new DirectoryInfo(start);
+            while (dir != null)
+            {
+                if (Directory.Exists(Path.Combine(dir.FullName, "config")) && Directory.Exists(Path.Combine(dir.FullName, "src"))) return dir.FullName;
+                dir = dir.Parent;
+            }
+            return null;
+        }
+
+        private static string FindTesseract(string baseDir, string repoRoot)
+        {
+            var candidates = new[] {
+                Path.Combine(baseDir, "runtime", "tesseract.exe"),
+                repoRoot == null ? null : Path.Combine(repoRoot, "runtime", "tesseract.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Tesseract-OCR", "tesseract.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Tesseract-OCR", "tesseract.exe")
+            };
+            return candidates.FirstOrDefault(x => !string.IsNullOrWhiteSpace(x) && File.Exists(x));
+        }
+
+        private static TesseractOptions AutoOptions(string baseDir, string repoRoot)
+        {
+            string exe = FindTesseract(baseDir, repoRoot);
+            if (exe == null)
+                throw new FileNotFoundException("Tesseract was not found. Put the Tesseract runtime folder next to AutoReport.WinForms.exe or install Tesseract-OCR in Program Files.");
+
+            string runtime = Path.GetDirectoryName(exe);
+            string tessdata = Path.Combine(runtime, "tessdata");
+            if (!File.Exists(Path.Combine(tessdata, "eng.traineddata")))
+                throw new FileNotFoundException("eng.traineddata was not found in " + tessdata);
+
+            return new TesseractOptions {
+                ExecutablePath = exe, TessdataDirectory = tessdata, Languages = "eng",
+                TimeoutSeconds = 60, Threads = 1, IncludeOriginalPass = true, IncludeYellowTextPass = true
+            };
         }
 
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
-            if (!File.Exists(enginePath.Text)) { MessageBox.Show(this, "Select a valid engine JSON file."); return; }
-            if (!File.Exists(rulesPath.Text)) { MessageBox.Show(this, "Select a valid extraction rules JSON file."); return; }
-
-            runButton.Enabled = false;
-            saveButton.Enabled = false;
-            observations.Rows.Clear();
-            rawText.Clear();
-            warnings.Clear();
+            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); rawText.Clear(); warnings.Clear();
+            status.Text = "Running OCR...";
             try
             {
-                var options = JsonFile.Read<TesseractOptions>(enginePath.Text);
-                var profile = JsonFile.Read<ExtractionProfile>(rulesPath.Text);
-                var engine = new AutoReportEngine(new TesseractReader(options), profile);
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string repoRoot = FindRepoRoot(baseDir);
+                string rules = repoRoot == null ? Path.Combine(baseDir, "config", "extraction.default.json") :
+                    Path.Combine(repoRoot, "config", "extraction.default.json");
+                if (!File.Exists(rules)) throw new FileNotFoundException("extraction.default.json was not found. Keep the config folder with the application.");
+
+                var engine = new AutoReportEngine(new TesseractReader(AutoOptions(baseDir, repoRoot)), JsonFile.Read<ExtractionProfile>(rules));
                 lastStudy = await engine.ExtractAsync("gui-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"),
                     new[] { imagePath.Text }, CancellationToken.None);
 
                 foreach (var item in lastStudy.Observations)
-                    observations.Rows.Add(item.Key, item.Value, item.Unit,
-                        item.Confidence.ToString("0.0"), item.Evidence, string.Join(", ", item.Warnings));
+                    observations.Rows.Add(item.Key, item.Value, item.Unit, item.Confidence.ToString("0.0"),
+                        item.Evidence, string.Join(", ", item.Warnings));
 
                 rawText.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
-                        string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
-
+                    string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
                 warnings.Text = string.Join(Environment.NewLine, lastStudy.Warnings);
                 saveButton.Enabled = true;
-                if (lastStudy.Observations.Count == 0)
-                    MessageBox.Show(this, "OCR finished, but no configured fields matched. Check the Raw OCR text tab.");
+                status.Text = "OCR complete - " + lastStudy.Observations.Count + " extracted candidate(s).";
+                if (lastStudy.Observations.Count == 0) MessageBox.Show(this, "OCR finished, but no configured fields matched. Check Raw OCR text.");
             }
             catch (Exception ex)
             {
-                lastStudy = null;
+                lastStudy = null; status.Text = "OCR failed.";
                 MessageBox.Show(this, ex.Message, "AutoReport", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally { runButton.Enabled = true; }
@@ -196,11 +168,7 @@ namespace AutoReport.WinForms
             using (var dialog = new SaveFileDialog { Filter = "JSON files|*.json", FileName = "study.json" })
             {
                 if (dialog.ShowDialog(this) != DialogResult.OK) return;
-                try
-                {
-                    JsonFile.Write(dialog.FileName, lastStudy);
-                    MessageBox.Show(this, "Saved.");
-                }
+                try { JsonFile.Write(dialog.FileName, lastStudy); MessageBox.Show(this, "Saved."); }
                 catch (Exception ex) { MessageBox.Show(this, ex.Message, "AutoReport", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             }
         }
