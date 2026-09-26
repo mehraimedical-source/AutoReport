@@ -17,7 +17,15 @@ namespace AutoReport.WinForms
 
         public PaddleOcrReader()
         {
-            var asm = Assembly.Load("PaddleOCRSharp");
+            Assembly asm;
+            try
+            {
+                asm = Assembly.Load("PaddleOCRSharp.Full");
+            }
+            catch (FileNotFoundException)
+            {
+                asm = Assembly.Load("PaddleOCRSharp");
+            }
             var engineType = asm.GetType("PaddleOCRSharp.PaddleOCREngine", true);
             var configType = asm.GetType("PaddleOCRSharp.OCRModelConfig", true);
             var parameterType = asm.GetType("PaddleOCRSharp.OCRParameter", true);
