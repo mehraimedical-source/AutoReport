@@ -136,6 +136,72 @@ namespace AutoReport
         }
     }
 
+    public static class LayoutStructureExtractor
+    {
+        private static readonly Regex Number = new Regex(@"^[+\\-]?\\d+(?:[.,]\\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
+        private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
+
+        private static bool IsValue(string s)
+        {
+            s = RuleExtractor.NormalizeDigits((s ?? "").Trim());
+            return Number.IsMatch(s);
+        }
+
+        private static bool LooksLikeSection(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text) || text.Length > 45 || text.Contains(":") || Regex.IsMatch(text, @"\\d")) return false;
+            string t = text.Trim().ToLowerInvariant();
+            return t == "ob" || t.Contains("biometr") || t.Contains("doppler") || t.Contains("uterine") ||
+                t.Contains("fetal") || t.Contains("anatom") || t.Contains("amniotic") || t.Contains("placenta") ||
+                t.Contains("cervix") || t.Contains("measurement");
+        }
+
+        public static List<StructuredField> Extract(SourcePage page)
+        {
+            var output = new List<StructuredField>();
+            string section = "General", subsection = "";
+            var cells = page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+
+            for (int i = 0; i < cells.Count; i++)
+            {
+                string text = (cells[i].Text ?? "").Trim();
+                if (LooksLikeSection(text))
+                {
+                    if (text.Equals("OB", StringComparison.OrdinalIgnoreCase) ||
+                        text.IndexOf("biometr", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        text.IndexOf("doppler", StringComparison.OrdinalIgnoreCase) >= 0)
+                    { section = text; subsection = ""; }
+                    else subsection = text;
+                    output.Add(new StructuredField { Section = section, Subsection = subsection, Type = "Section",
+                        Key = text, RawText = text, Confidence = cells[i].Confidence });
+                    continue;
+                }
+
+                // Generic key/value extraction from Paddle's reading order. A textual label followed
+                // by one or more numeric cells is treated as a row, without requiring a configured rule.
+                if (IsValue(text) || Units.Contains(text) || text.Length > 50) continue;
+                var values = new List<string>();
+                string unit = "";
+                int end = Math.Min(cells.Count, i + 7);
+                for (int j = i + 1; j < end; j++)
+                {
+                    string next = (cells[j].Text ?? "").Trim();
+                    if (IsValue(next)) { values.Add(RuleExtractor.NormalizeDigits(next)); continue; }
+                    if (values.Count > 0 && Units.Contains(next)) { unit = next; break; }
+                    if (values.Count > 0) break;
+                    // allow one short table/header token between label and first value
+                    if (j > i + 2) break;
+                }
+                if (values.Count > 0)
+                    output.Add(new StructuredField { Section = section, Subsection = subsection, Type = "KeyValue",
+                        Key = text, Values = values, Unit = unit, RawText = text + " " + string.Join(" ", values) +
+                        (unit.Length == 0 ? "" : " " + unit), Confidence = cells[i].Confidence });
+            }
+            return output;
+        }
+    }
+
     public static class Units
     {
         public static bool Compatible(string a, string b)
@@ -181,10 +247,12 @@ namespace AutoReport
                 {
                     page.Sha256 = hash; page.FileName = Path.GetFileName(path);
                     study.Sources.Add(page); study.Observations.AddRange(extractor.Extract(page));
+                    study.StructuredFields.AddRange(LayoutStructureExtractor.Extract(page));
                 }
             }
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
-            if (study.Observations.Count == 0) study.Warnings.Add("No recognized fields. Inspect raw text and extend the profile.");
+            if (study.Observations.Count == 0 && study.StructuredFields.Count == 0)
+                study.Warnings.Add("No structured fields were recognized. Inspect raw OCR text.");
             foreach (var field in study.Observations.GroupBy(x => x.Key))
                 if (field.Select(x => x.Value + "|" + x.Unit).Distinct().Count() > 1)
                     study.Warnings.Add("Conflicting candidates require review: " + field.Key);
