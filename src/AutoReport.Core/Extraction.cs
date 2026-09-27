@@ -163,6 +163,21 @@ namespace AutoReport
         private static bool IsUnit(TextLine x) { return Units.Contains(T(x)); }
         private static double CenterX(TextLine x) { return x.X + x.Width / 2.0; }
         private static double CenterY(TextLine x) { return x.Y + x.Height / 2.0; }
+        private static bool IsKnownMeasurementLabel(string s)
+        {
+            s = (s ?? "").Trim();
+            return Regex.IsMatch(s, @"^(PGmean|PGmax|S/D|D/S|RI|PI|AccT|Acc|DecT|Dec|PSV|EDV|TAMV|TAPV)$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+        }
+        private static string CanonicalSection(string s)
+        {
+            s = (s ?? "").Trim();
+            if (Regex.IsMatch(s, @"^Rt\.?\s*Uterine\s*A", RegexOptions.IgnoreCase)) return "Doppler.UterineArtery.Right";
+            if (Regex.IsMatch(s, @"^Lt\.?\s*Uterine\s*A", RegexOptions.IgnoreCase)) return "Doppler.UterineArtery.Left";
+            if (Regex.IsMatch(s, @"Umbilical\s*A", RegexOptions.IgnoreCase)) return "Doppler.UmbilicalArtery";
+            if (Regex.IsMatch(s, @"(Mid\s*Cereb|MCA)", RegexOptions.IgnoreCase)) return "Doppler.MiddleCerebralArtery";
+            return s;
+        }
 
         private static List<VisualRow> BuildRows(IEnumerable<TextLine> source)
         {
@@ -262,16 +277,62 @@ namespace AutoReport
             if (mapped.Count == 0) return null;
             string unit = row.Cells.Where(IsUnit).Select(T).FirstOrDefault() ?? "";
             return new StructuredField {
-                Section = table.Section, Subsection = "", Type = "TableRow", Key = T(label),
+                Section = CanonicalSection(table.Section), Subsection = table.Section, Type = "TableRow", Key = T(label),
                 Cells = mapped, Values = mapped.Values.ToList(), Unit = unit,
                 RawText = string.Join(" ", row.Cells.Select(T)), Confidence = row.Cells.Min(x => x.Confidence),
                 Warnings = warnings
             };
         }
 
+        private static List<StructuredField> ExtractDopplerRows(List<VisualRow> rows)
+        {
+            var output = new List<StructuredField>();
+            string section = "";
+            foreach (var row in rows)
+            {
+                var title = row.Cells.Select(T).FirstOrDefault(x =>
+                    Regex.IsMatch(x, @"^(Rt\.?|Lt\.?)?\s*Uterine\s*A$|^Umbilical\s*A$|^(Mid\s*Cereb|MCA)\s*A?$",
+                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant));
+                if (!string.IsNullOrEmpty(title)) section = title;
+                if (string.IsNullOrEmpty(section)) continue;
+
+                var label = row.Cells.OrderBy(x => x.X).FirstOrDefault(x => IsKnownMeasurementLabel(T(x)));
+                if (label == null) continue;
+                var values = row.Cells.Where(x => IsValue(x) && x.X > label.X).OrderBy(x => x.X).ToList();
+                if (values.Count == 0) continue;
+
+                // Ultrasound tables repeat the same reading in Last/1/2/3. Repeated identical
+                // cells are evidence of one value, not conflicting measurements.
+                string primary = RuleExtractor.NormalizeDigits(T(values[0])).TrimEnd('*', '%');
+                var field = new StructuredField {
+                    Section = CanonicalSection(section), Subsection = section, Type = "Measurement",
+                    Key = T(label), RawText = string.Join(" ", row.Cells.Select(T)),
+                    Confidence = row.Cells.Min(x => x.Confidence)
+                };
+                field.Cells["Value"] = primary;
+                field.Values.Add(primary);
+
+                var unit = row.Cells.Where(IsUnit).Select(T).FirstOrDefault();
+                field.Unit = unit ?? "";
+
+                // Percentile is printed in the far-right Pctl column. Do not infer it from a
+                // duplicate value in the Last/1/2/3 columns.
+                var percentile = values.Where(x => x.X >= 700).OrderBy(x => x.X).FirstOrDefault();
+                if (percentile != null) {
+                    string p = RuleExtractor.NormalizeDigits(T(percentile)).TrimEnd('*', '%');
+                    field.Cells["Percentile"] = p;
+                    if (T(percentile).Contains("*")) field.Cells["PercentileFlag"] = "*";
+                }
+                output.Add(field);
+            }
+            return output;
+        }
+
         public static List<StructuredField> Extract(SourcePage page)
         {
             var rows = BuildRows(page.Lines);
+            var doppler = ExtractDopplerRows(rows);
+            if (doppler.Count > 0) return doppler;
             var output = new List<StructuredField>();
             TableContext active = null;
             for (int i = 0; i < rows.Count; i++)
