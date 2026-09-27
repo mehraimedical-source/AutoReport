@@ -145,89 +145,85 @@ namespace AutoReport
         private static bool IsValue(string s)
         { return Number.IsMatch(RuleExtractor.NormalizeDigits((s ?? "").Trim())); }
 
-        private static bool IsKnownSection(string text)
-        {
-            string t = (text ?? "").Trim().ToLowerInvariant();
-            return t == "ob" || t.Contains("biometr") || t.Contains("doppler") || t.Contains("fetal") ||
-                t.Contains("anatom") || t.Contains("amniotic") || t.Contains("placenta") ||
-                t.Contains("cervix") || t.Contains("measurement");
-        }
-
-        private static bool IsSubsection(string text)
-        {
-            string t = (text ?? "").Trim().ToLowerInvariant();
-            return t.Contains("uterine") || t.Contains("umbilical") || t.Contains("cerebral") ||
-                t.Contains("ductus") || t.Contains("artery") || t.Contains("vein");
-        }
+        private static double CenterX(TextLine x) { return x.X + x.Width / 2.0; }
+        private static double CenterY(TextLine x) { return x.Y + x.Height / 2.0; }
 
         public static List<StructuredField> Extract(SourcePage page)
         {
             var output = new List<StructuredField>();
-            string section = "General", subsection = "";
             var cells = page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
+            if (cells.Count == 0) return output;
 
-            for (int i = 0; i < cells.Count; i++)
+            // Discover table headers from the image itself. No medical section names or invented
+            // column names are used. A header band is a horizontal cluster containing >=2 short,
+            // non-unit labels (numeric labels such as 1/2/3 are allowed).
+            var rows = new List<List<TextLine>>();
+            foreach (var cell in cells.OrderBy(CenterY))
             {
-                string text = (cells[i].Text ?? "").Trim();
-                if (IsKnownSection(text) && !IsSubsection(text))
+                List<TextLine> row = null;
+                double best = double.MaxValue;
+                foreach (var candidate in rows)
                 {
-                    section = text; subsection = "";
-                    continue; // headings provide context; they are not data rows
+                    double cy = candidate.Average(CenterY);
+                    double h = Math.Max(4.0, candidate.Average(x => (double)Math.Max(1, x.Height)) * 0.65);
+                    double d = Math.Abs(CenterY(cell) - cy);
+                    if (d <= h && d < best) { row = candidate; best = d; }
                 }
-                if (IsSubsection(text))
+                if (row == null) { row = new List<TextLine>(); rows.Add(row); }
+                row.Add(cell);
+            }
+            foreach (var row in rows) row.Sort((a,b) => a.X.CompareTo(b.X));
+
+            string section = "";
+            List<TextLine> activeHeaders = null;
+            double headerY = -1;
+
+            foreach (var row in rows.OrderBy(r => r.Average(CenterY)))
+            {
+                var nonUnits = row.Where(x => !UnitNames.Contains((x.Text ?? "").Trim())).ToList();
+                bool headerBand = nonUnits.Count >= 2 && nonUnits.Count(x => (x.Text ?? "").Trim().Length <= 12) >= 2 &&
+                    nonUnits.Count(x => IsValue(x.Text)) <= Math.Max(0, nonUnits.Count - 1);
+
+                if (headerBand)
                 {
-                    subsection = text;
-                    continue; // e.g. Rt. Uterine A
+                    activeHeaders = nonUnits;
+                    headerY = row.Average(CenterY);
+                    continue;
                 }
 
-                // A data row starts with a textual label and must be followed immediately by a value.
-                // This prevents table headers (Last/1/2/3/Pctl.) and neighboring labels becoming fields.
-                if (IsValue(text) || UnitNames.Contains(text) || text.Length > 50) continue;
-                if (i + 1 >= cells.Count || !IsValue(cells[i + 1].Text)) continue;
-
-                var values = new List<string>();
-                string unit = "";
-                int j = i + 1;
-                while (j < cells.Count && values.Count < 5)
+                // A one-cell textual row immediately before a table is a section title exactly as
+                // OCR saw it. It is never renamed/classified (e.g. no inferred "Doppler").
+                if (row.Count == 1 && !IsValue(row[0].Text) && !UnitNames.Contains((row[0].Text ?? "").Trim()))
                 {
-                    string next = (cells[j].Text ?? "").Trim();
-                    if (IsValue(next)) { values.Add(RuleExtractor.NormalizeDigits(next)); j++; continue; }
-                    if (UnitNames.Contains(next)) unit = next;
-                    break;
+                    var nextHeader = rows.Where(r => r.Average(CenterY) > row.Average(CenterY))
+                        .OrderBy(r => r.Average(CenterY)).FirstOrDefault();
+                    if (nextHeader != null && nextHeader.Count >= 2)
+                        section = (row[0].Text ?? "").Trim();
+                    continue;
                 }
 
-                var named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                // Ultrasound machines commonly use Last, 1, 2, 3 and Pctl. columns. Assign
-                // values by X position when a header row is visible; fall back to these canonical
-                // column names in reading order.
-                var headerNames = new[] { "Last", "1", "2", "3", "Pctl." };
-                var headers = cells.Where(x => headerNames.Any(h => string.Equals((x.Text ?? "").Trim(), h, StringComparison.OrdinalIgnoreCase))).ToList();
-                var valueCells = cells.Skip(i + 1).Take(Math.Max(0, j - i - 1)).Where(x => IsValue(x.Text)).ToList();
+                if (activeHeaders == null || row.Average(CenterY) <= headerY) continue;
+                var label = row.FirstOrDefault(x => !IsValue(x.Text) && !UnitNames.Contains((x.Text ?? "").Trim()));
+                var valueCells = row.Where(x => IsValue(x.Text)).ToList();
+                if (label == null || valueCells.Count == 0) continue;
+
+                var named = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
                 foreach (var valueCell in valueCells)
                 {
-                    TextLine nearest = null;
-                    double distance = double.MaxValue;
-                    foreach (var header in headers)
-                    {
-                        double d = Math.Abs((valueCell.X + valueCell.Width / 2.0) - (header.X + header.Width / 2.0));
-                        if (d < distance) { distance = d; nearest = header; }
-                    }
-                    string column = nearest == null ? null : (nearest.Text ?? "").Trim();
-                    if (string.IsNullOrWhiteSpace(column) || named.ContainsKey(column))
-                        column = headerNames.FirstOrDefault(h => !named.ContainsKey(h)) ?? ("Value" + (named.Count + 1));
+                    var nearest = activeHeaders.OrderBy(h => Math.Abs(CenterX(h) - CenterX(valueCell))).FirstOrDefault();
+                    if (nearest == null) continue;
+                    string column = (nearest.Text ?? "").Trim();
+                    if (column.Length == 0 || named.ContainsKey(column)) continue;
                     named[column] = RuleExtractor.NormalizeDigits((valueCell.Text ?? "").Trim());
                 }
-
-                output.Add(new StructuredField {
-                    Section = section, Subsection = subsection, Type = "TableRow", Key = text,
-                    Values = values, Cells = named, Unit = unit,
-                    RawText = text + " " + string.Join(" ", values) + (unit.Length == 0 ? "" : " " + unit),
-                    Confidence = cells.Skip(i).Take(Math.Max(1, j - i)).Min(x => x.Confidence)
-                });
-                i = Math.Max(i, j - 1);
+                string unit = row.Select(x => (x.Text ?? "").Trim()).FirstOrDefault(x => UnitNames.Contains(x)) ?? "";
+                if (named.Count > 0)
+                    output.Add(new StructuredField { Section = section, Subsection = "", Type = "TableRow",
+                        Key = (label.Text ?? "").Trim(), Cells = named, Values = named.Values.ToList(), Unit = unit,
+                        RawText = string.Join(" ", row.Select(x => x.Text)), Confidence = row.Min(x => x.Confidence) });
             }
-            return output.GroupBy(x => (x.Section ?? "") + "\u001f" + (x.Subsection ?? "") + "\u001f" + (x.Key ?? ""),
-                StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
+            return output.GroupBy(x => (x.Section ?? "") + "\u001f" + (x.Key ?? ""), StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First()).ToList();
         }
     }
 
