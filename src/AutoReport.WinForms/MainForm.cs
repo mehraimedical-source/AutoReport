@@ -71,7 +71,7 @@ namespace AutoReport.WinForms
             structured.AllowUserToDeleteRows = false; structured.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             structured.Columns.Add("Section","Section"); structured.Columns.Add("Subsection","Subsection");
             structured.Columns.Add("Type","Type"); structured.Columns.Add("Key","Key / Row");
-            structured.Columns.Add("Values","Values"); structured.Columns.Add("Unit","Unit");
+            structured.Columns.Add("Values","Cells"); structured.Columns.Add("Unit","Unit");
             structureTab.Controls.Add(structured); tabs.TabPages.Insert(0, structureTab);
             tabs.SelectedTab = structureTab;
 
@@ -133,7 +133,9 @@ namespace AutoReport.WinForms
 
                 foreach (var item in lastStudy.StructuredFields)
                     structured.Rows.Add(item.Section, item.Subsection, item.Type, item.Key,
-                        string.Join(" | ", item.Values), item.Unit);
+                        item.Cells != null && item.Cells.Count > 0
+                            ? string.Join(" | ", item.Cells.Select(x => x.Key + "=" + x.Value))
+                            : string.Join(" | ", item.Values), item.Unit);
 
                 rawText.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
