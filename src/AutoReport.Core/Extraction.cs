@@ -136,94 +136,142 @@ namespace AutoReport
         }
     }
 
+    // Canonical, evidence-only ultrasound layout pipeline:
+    // OCR cells -> visual rows -> table/header detection -> cell assignment -> validation.
     public static class LayoutStructureExtractor
     {
         private static readonly Regex Number = new Regex(@"^[+\\-]?\\d+(?:[.,]\\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
-        private static readonly HashSet<string> UnitNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
 
-        private static bool IsValue(string s)
-        { return Number.IsMatch(RuleExtractor.NormalizeDigits((s ?? "").Trim())); }
+        private sealed class VisualRow
+        {
+            public readonly List<TextLine> Cells = new List<TextLine>();
+            public double Y { get { return Cells.Count == 0 ? 0 : Cells.Average(CenterY); } }
+            public double Height { get { return Cells.Count == 0 ? 1 : Cells.Average(x => (double)Math.Max(1, x.Height)); } }
+        }
+        private sealed class TableContext
+        {
+            public string Section = "";
+            public VisualRow Header;
+            public double HeaderY;
+        }
 
+        private static string T(TextLine x) { return (x.Text ?? "").Trim(); }
+        private static bool IsValue(TextLine x) { return IsValue(T(x)); }
+        private static bool IsValue(string x) { return Number.IsMatch(RuleExtractor.NormalizeDigits((x ?? "").Trim())); }
+        private static bool IsUnit(TextLine x) { return Units.Contains(T(x)); }
         private static double CenterX(TextLine x) { return x.X + x.Width / 2.0; }
         private static double CenterY(TextLine x) { return x.Y + x.Height / 2.0; }
 
+        private static List<VisualRow> BuildRows(IEnumerable<TextLine> source)
+        {
+            var rows = new List<VisualRow>();
+            foreach (var cell in source.Where(x => !string.IsNullOrWhiteSpace(x.Text)).OrderBy(CenterY))
+            {
+                VisualRow best = null; double bestDistance = double.MaxValue;
+                foreach (var row in rows)
+                {
+                    double tolerance = Math.Max(3.0, Math.Min(row.Height, Math.Max(1, cell.Height)) * 0.45);
+                    double distance = Math.Abs(CenterY(cell) - row.Y);
+                    if (distance <= tolerance && distance < bestDistance) { best = row; bestDistance = distance; }
+                }
+                if (best == null) { best = new VisualRow(); rows.Add(best); }
+                best.Cells.Add(cell);
+            }
+            foreach (var row in rows) row.Cells.Sort((a,b) => a.X.CompareTo(b.X));
+            return rows.OrderBy(x => x.Y).ToList();
+        }
+
+        private static bool LooksLikeHeader(VisualRow row)
+        {
+            if (row.Cells.Count < 2) return false;
+            // Header evidence comes only from OCR. It must be a horizontal band of short tokens,
+            // mostly non-units, and cannot look like a normal label+measurements data row.
+            var usable = row.Cells.Where(x => !IsUnit(x)).ToList();
+            if (usable.Count < 2) return false;
+            int textual = usable.Count(x => !IsValue(x));
+            int shortTokens = usable.Count(x => T(x).Length > 0 && T(x).Length <= 12);
+            bool beginsWithTextAndHasSeveralValues = !IsValue(usable[0]) && usable.Skip(1).Count(IsValue) >= 2;
+            return shortTokens >= 2 && textual >= 1 && !beginsWithTextAndHasSeveralValues;
+        }
+
+        private static string FindSection(List<VisualRow> rows, int headerIndex)
+        {
+            // Search only nearby rows above the table. Return exact OCR text, never a medical
+            // classification. Prefer a single-cell title; otherwise leave it blank.
+            for (int i = headerIndex - 1; i >= 0 && i >= headerIndex - 3; i--)
+            {
+                var row = rows[i];
+                if (row.Cells.Count != 1) continue;
+                var cell = row.Cells[0];
+                if (!IsValue(cell) && !IsUnit(cell) && T(cell).Length > 0 && T(cell).Length <= 80)
+                    return T(cell);
+            }
+            return "";
+        }
+
+        private static StructuredField ParseDataRow(VisualRow row, TableContext table)
+        {
+            if (table == null || table.Header == null || row.Y <= table.HeaderY) return null;
+            var labels = row.Cells.Where(x => !IsValue(x) && !IsUnit(x)).ToList();
+            var values = row.Cells.Where(IsValue).ToList();
+            if (labels.Count == 0 || values.Count == 0) return null;
+
+            // Row label is the left-most textual cell. A unit is evidence, not a label.
+            var label = labels.OrderBy(x => x.X).First();
+            if (CenterX(label) >= values.Min(CenterX)) return null;
+
+            var headers = table.Header.Cells.Where(x => !IsUnit(x)).OrderBy(CenterX).ToList();
+            var mapped = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+            var warnings = new List<string>();
+            foreach (var value in values)
+            {
+                var ranked = headers.Select(h => new { Header = h, Distance = Math.Abs(CenterX(h) - CenterX(value)) })
+                    .OrderBy(x => x.Distance).ToList();
+                if (ranked.Count == 0) { warnings.Add("NoHeaderForCell:" + T(value)); continue; }
+                var nearest = ranked[0];
+                // Reject implausibly distant matches instead of inventing a column assignment.
+                double typicalWidth = Math.Max(12.0, headers.Average(h => (double)Math.Max(1, h.Width)));
+                if (nearest.Distance > typicalWidth * 3.0) { warnings.Add("AmbiguousColumn:" + T(value)); continue; }
+                string column = T(nearest.Header);
+                if (mapped.ContainsKey(column)) { warnings.Add("DuplicateColumn:" + column); continue; }
+                mapped[column] = RuleExtractor.NormalizeDigits(T(value));
+            }
+            if (mapped.Count == 0) return null;
+            string unit = row.Cells.Where(IsUnit).Select(T).FirstOrDefault() ?? "";
+            return new StructuredField {
+                Section = table.Section, Subsection = "", Type = "TableRow", Key = T(label),
+                Cells = mapped, Values = mapped.Values.ToList(), Unit = unit,
+                RawText = string.Join(" ", row.Cells.Select(T)), Confidence = row.Cells.Min(x => x.Confidence),
+                Warnings = warnings
+            };
+        }
+
         public static List<StructuredField> Extract(SourcePage page)
         {
+            var rows = BuildRows(page.Lines);
             var output = new List<StructuredField>();
-            var cells = page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
-            if (cells.Count == 0) return output;
-
-            // Discover table headers from the image itself. No medical section names or invented
-            // column names are used. A header band is a horizontal cluster containing >=2 short,
-            // non-unit labels (numeric labels such as 1/2/3 are allowed).
-            var rows = new List<List<TextLine>>();
-            foreach (var cell in cells.OrderBy(CenterY))
+            TableContext active = null;
+            for (int i = 0; i < rows.Count; i++)
             {
-                List<TextLine> row = null;
-                double best = double.MaxValue;
-                foreach (var candidate in rows)
+                if (LooksLikeHeader(rows[i]))
                 {
-                    double cy = candidate.Average(CenterY);
-                    double h = Math.Max(4.0, candidate.Average(x => (double)Math.Max(1, x.Height)) * 0.65);
-                    double d = Math.Abs(CenterY(cell) - cy);
-                    if (d <= h && d < best) { row = candidate; best = d; }
-                }
-                if (row == null) { row = new List<TextLine>(); rows.Add(row); }
-                row.Add(cell);
-            }
-            foreach (var row in rows) row.Sort((a,b) => a.X.CompareTo(b.X));
-
-            string section = "";
-            List<TextLine> activeHeaders = null;
-            double headerY = -1;
-
-            foreach (var row in rows.OrderBy(r => r.Average(CenterY)))
-            {
-                var nonUnits = row.Where(x => !UnitNames.Contains((x.Text ?? "").Trim())).ToList();
-                bool headerBand = nonUnits.Count >= 2 && nonUnits.Count(x => (x.Text ?? "").Trim().Length <= 12) >= 2 &&
-                    nonUnits.Count(x => IsValue(x.Text)) <= Math.Max(0, nonUnits.Count - 1);
-
-                if (headerBand)
-                {
-                    activeHeaders = nonUnits;
-                    headerY = row.Average(CenterY);
+                    active = new TableContext { Header = rows[i], HeaderY = rows[i].Y, Section = FindSection(rows, i) };
                     continue;
                 }
-
-                // A one-cell textual row immediately before a table is a section title exactly as
-                // OCR saw it. It is never renamed/classified (e.g. no inferred "Doppler").
-                if (row.Count == 1 && !IsValue(row[0].Text) && !UnitNames.Contains((row[0].Text ?? "").Trim()))
-                {
-                    var nextHeader = rows.Where(r => r.Average(CenterY) > row.Average(CenterY))
-                        .OrderBy(r => r.Average(CenterY)).FirstOrDefault();
-                    if (nextHeader != null && nextHeader.Count >= 2)
-                        section = (row[0].Text ?? "").Trim();
-                    continue;
-                }
-
-                if (activeHeaders == null || row.Average(CenterY) <= headerY) continue;
-                var label = row.FirstOrDefault(x => !IsValue(x.Text) && !UnitNames.Contains((x.Text ?? "").Trim()));
-                var valueCells = row.Where(x => IsValue(x.Text)).ToList();
-                if (label == null || valueCells.Count == 0) continue;
-
-                var named = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var valueCell in valueCells)
-                {
-                    var nearest = activeHeaders.OrderBy(h => Math.Abs(CenterX(h) - CenterX(valueCell))).FirstOrDefault();
-                    if (nearest == null) continue;
-                    string column = (nearest.Text ?? "").Trim();
-                    if (column.Length == 0 || named.ContainsKey(column)) continue;
-                    named[column] = RuleExtractor.NormalizeDigits((valueCell.Text ?? "").Trim());
-                }
-                string unit = row.Select(x => (x.Text ?? "").Trim()).FirstOrDefault(x => UnitNames.Contains(x)) ?? "";
-                if (named.Count > 0)
-                    output.Add(new StructuredField { Section = section, Subsection = "", Type = "TableRow",
-                        Key = (label.Text ?? "").Trim(), Cells = named, Values = named.Values.ToList(), Unit = unit,
-                        RawText = string.Join(" ", row.Select(x => x.Text)), Confidence = row.Min(x => x.Confidence) });
+                var field = ParseDataRow(rows[i], active);
+                if (field != null) output.Add(field);
             }
+
+            // Canonical result: one evidence-backed row per section/key. Conflicting reconstructions
+            // are not silently merged; keep the strongest row and flag it for review.
             return output.GroupBy(x => (x.Section ?? "") + "\u001f" + (x.Key ?? ""), StringComparer.OrdinalIgnoreCase)
-                .Select(g => g.First()).ToList();
+                .Select(g => {
+                    var best = g.OrderByDescending(x => x.Cells.Count).ThenByDescending(x => x.Confidence).First();
+                    if (g.Count() > 1) best.Warnings.Add("MultipleLayoutCandidates");
+                    return best;
+                }).ToList();
         }
     }
 
