@@ -139,22 +139,25 @@ namespace AutoReport
     public static class LayoutStructureExtractor
     {
         private static readonly Regex Number = new Regex(@"^[+\\-]?\\d+(?:[.,]\\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
-        private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> UnitNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
 
         private static bool IsValue(string s)
+        { return Number.IsMatch(RuleExtractor.NormalizeDigits((s ?? "").Trim())); }
+
+        private static bool IsKnownSection(string text)
         {
-            s = RuleExtractor.NormalizeDigits((s ?? "").Trim());
-            return Number.IsMatch(s);
+            string t = (text ?? "").Trim().ToLowerInvariant();
+            return t == "ob" || t.Contains("biometr") || t.Contains("doppler") || t.Contains("fetal") ||
+                t.Contains("anatom") || t.Contains("amniotic") || t.Contains("placenta") ||
+                t.Contains("cervix") || t.Contains("measurement");
         }
 
-        private static bool LooksLikeSection(string text)
+        private static bool IsSubsection(string text)
         {
-            if (string.IsNullOrWhiteSpace(text) || text.Length > 45 || text.Contains(":") || Regex.IsMatch(text, @"\\d")) return false;
-            string t = text.Trim().ToLowerInvariant();
-            return t == "ob" || t.Contains("biometr") || t.Contains("doppler") || t.Contains("uterine") ||
-                t.Contains("fetal") || t.Contains("anatom") || t.Contains("amniotic") || t.Contains("placenta") ||
-                t.Contains("cervix") || t.Contains("measurement");
+            string t = (text ?? "").Trim().ToLowerInvariant();
+            return t.Contains("uterine") || t.Contains("umbilical") || t.Contains("cerebral") ||
+                t.Contains("ductus") || t.Contains("artery") || t.Contains("vein");
         }
 
         public static List<StructuredField> Extract(SourcePage page)
@@ -166,39 +169,43 @@ namespace AutoReport
             for (int i = 0; i < cells.Count; i++)
             {
                 string text = (cells[i].Text ?? "").Trim();
-                if (LooksLikeSection(text))
+                if (IsKnownSection(text) && !IsSubsection(text))
                 {
-                    if (text.Equals("OB", StringComparison.OrdinalIgnoreCase) ||
-                        text.IndexOf("biometr", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        text.IndexOf("doppler", StringComparison.OrdinalIgnoreCase) >= 0)
-                    { section = text; subsection = ""; }
-                    else subsection = text;
-                    output.Add(new StructuredField { Section = section, Subsection = subsection, Type = "Section",
-                        Key = text, RawText = text, Confidence = cells[i].Confidence });
-                    continue;
+                    section = text; subsection = "";
+                    continue; // headings provide context; they are not data rows
+                }
+                if (IsSubsection(text))
+                {
+                    subsection = text;
+                    continue; // e.g. Rt. Uterine A
                 }
 
-                // Generic key/value extraction from Paddle's reading order. A textual label followed
-                // by one or more numeric cells is treated as a row, without requiring a configured rule.
-                if (IsValue(text) || Units.Contains(text) || text.Length > 50) continue;
+                // A data row starts with a textual label and must be followed immediately by a value.
+                // This prevents table headers (Last/1/2/3/Pctl.) and neighboring labels becoming fields.
+                if (IsValue(text) || UnitNames.Contains(text) || text.Length > 50) continue;
+                if (i + 1 >= cells.Count || !IsValue(cells[i + 1].Text)) continue;
+
                 var values = new List<string>();
                 string unit = "";
-                int end = Math.Min(cells.Count, i + 7);
-                for (int j = i + 1; j < end; j++)
+                int j = i + 1;
+                while (j < cells.Count && values.Count < 5)
                 {
                     string next = (cells[j].Text ?? "").Trim();
-                    if (IsValue(next)) { values.Add(RuleExtractor.NormalizeDigits(next)); continue; }
-                    if (values.Count > 0 && Units.Contains(next)) { unit = next; break; }
-                    if (values.Count > 0) break;
-                    // allow one short table/header token between label and first value
-                    if (j > i + 2) break;
+                    if (IsValue(next)) { values.Add(RuleExtractor.NormalizeDigits(next)); j++; continue; }
+                    if (UnitNames.Contains(next)) unit = next;
+                    break;
                 }
-                if (values.Count > 0)
-                    output.Add(new StructuredField { Section = section, Subsection = subsection, Type = "KeyValue",
-                        Key = text, Values = values, Unit = unit, RawText = text + " " + string.Join(" ", values) +
-                        (unit.Length == 0 ? "" : " " + unit), Confidence = cells[i].Confidence });
+
+                output.Add(new StructuredField {
+                    Section = section, Subsection = subsection, Type = "Row", Key = text,
+                    Values = values, Unit = unit,
+                    RawText = text + " " + string.Join(" ", values) + (unit.Length == 0 ? "" : " " + unit),
+                    Confidence = cells.Skip(i).Take(Math.Max(1, j - i)).Min(x => x.Confidence)
+                });
+                i = Math.Max(i, j - 1);
             }
-            return output;
+            return output.GroupBy(x => (x.Section ?? "") + "\u001f" + (x.Subsection ?? "") + "\u001f" + (x.Key ?? ""),
+                StringComparer.OrdinalIgnoreCase).Select(g => g.First()).ToList();
         }
     }
 
