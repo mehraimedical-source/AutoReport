@@ -59,13 +59,6 @@ namespace AutoReport.WinForms
             split.Panel1.Controls.Add(preview);
 
             var tabs = new TabControl { Dock = DockStyle.Fill }; split.Panel2.Controls.Add(tabs);
-            var resultTab = new TabPage("Legacy rule candidates");
-            observations.Dock = DockStyle.Fill; observations.ReadOnly = true; observations.AllowUserToAddRows = false;
-            observations.AllowUserToDeleteRows = false; observations.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            observations.Columns.Add("Key","Field"); observations.Columns.Add("Value","Value"); observations.Columns.Add("Unit","Unit");
-            observations.Columns.Add("Confidence","OCR confidence"); observations.Columns.Add("Evidence","Evidence"); observations.Columns.Add("Warnings","Warnings");
-            resultTab.Controls.Add(observations); tabs.TabPages.Add(resultTab);
-
             var structureTab = new TabPage("Structured report");
             structured.Dock = DockStyle.Fill; structured.ReadOnly = true; structured.AllowUserToAddRows = false;
             structured.AllowUserToDeleteRows = false; structured.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
@@ -127,10 +120,6 @@ namespace AutoReport.WinForms
                         new[] { imagePath.Text }, CancellationToken.None);
                 }
 
-                foreach (var item in lastStudy.Observations)
-                    observations.Rows.Add(item.Key, item.Value, item.Unit, item.Confidence.ToString("0.0"),
-                        item.Evidence, string.Join(", ", item.Warnings));
-
                 foreach (var item in lastStudy.StructuredFields)
                     structured.Rows.Add(item.Section, item.Subsection, item.Type, item.Key,
                         item.Cells != null && item.Cells.Count > 0
@@ -142,8 +131,7 @@ namespace AutoReport.WinForms
                     string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
                 warnings.Text = string.Join(Environment.NewLine, lastStudy.Warnings);
                 saveButton.Enabled = true;
-                status.Text = "OCR complete - " + lastStudy.StructuredFields.Count + " structured item(s), " +
-                    lastStudy.Observations.Count + " configured candidate(s).";
+                status.Text = "OCR complete - " + lastStudy.StructuredFields.Count + " structured item(s).";
                 if (lastStudy.StructuredFields.Count == 0 && lastStudy.Observations.Count == 0)
                     MessageBox.Show(this, "OCR finished, but no structured fields were recognized. Check Raw OCR text.");
             }
