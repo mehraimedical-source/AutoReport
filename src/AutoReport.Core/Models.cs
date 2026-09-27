@@ -48,6 +48,7 @@ namespace AutoReport
         public string Key { get; set; }
         public List<string> Values { get; set; } = new List<string>();
         public Dictionary<string, string> Cells { get; set; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        public List<string> Warnings { get; set; } = new List<string>();
         public string Unit { get; set; }
         public string RawText { get; set; }
         public double Confidence { get; set; }
