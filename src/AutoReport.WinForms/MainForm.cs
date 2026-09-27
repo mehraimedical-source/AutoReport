@@ -59,7 +59,7 @@ namespace AutoReport.WinForms
             split.Panel1.Controls.Add(preview);
 
             var tabs = new TabControl { Dock = DockStyle.Fill }; split.Panel2.Controls.Add(tabs);
-            var resultTab = new TabPage("Extracted fields");
+            var resultTab = new TabPage("Legacy rule candidates");
             observations.Dock = DockStyle.Fill; observations.ReadOnly = true; observations.AllowUserToAddRows = false;
             observations.AllowUserToDeleteRows = false; observations.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
             observations.Columns.Add("Key","Field"); observations.Columns.Add("Value","Value"); observations.Columns.Add("Unit","Unit");
@@ -72,7 +72,8 @@ namespace AutoReport.WinForms
             structured.Columns.Add("Section","Section"); structured.Columns.Add("Subsection","Subsection");
             structured.Columns.Add("Type","Type"); structured.Columns.Add("Key","Key / Row");
             structured.Columns.Add("Values","Values"); structured.Columns.Add("Unit","Unit");
-            structureTab.Controls.Add(structured); tabs.TabPages.Add(structureTab);
+            structureTab.Controls.Add(structured); tabs.TabPages.Insert(0, structureTab);
+            tabs.SelectedTab = structureTab;
 
             var textTab = new TabPage("Raw OCR text");
             rawText.Dock = DockStyle.Fill; rawText.Multiline = true; rawText.ScrollBars = ScrollBars.Both; rawText.ReadOnly = true;
