@@ -63,9 +63,9 @@ namespace AutoReport.WinForms
             var structureTab = new TabPage("Structured report");
             structured.Dock = DockStyle.Fill; structured.ReadOnly = true; structured.AllowUserToAddRows = false;
             structured.AllowUserToDeleteRows = false; structured.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            structured.Columns.Add("Section","Section"); structured.Columns.Add("Subsection","Subsection");
-            structured.Columns.Add("Type","Type"); structured.Columns.Add("Key","Key / Row");
-            structured.Columns.Add("Values","Cells"); structured.Columns.Add("Unit","Unit");
+            structured.Columns.Add("Section","Section"); structured.Columns.Add("Key","Row / Field");
+            structured.Columns.Add("Values","Named cells"); structured.Columns.Add("Unit","Unit");
+            structured.Columns.Add("Confidence","Confidence"); structured.Columns.Add("Validation","Validation");
             structureTab.Controls.Add(structured); tabs.TabPages.Insert(0, structureTab);
             tabs.SelectedTab = structureTab;
 
@@ -126,10 +126,11 @@ namespace AutoReport.WinForms
                 }
 
                 foreach (var item in lastStudy.StructuredFields)
-                    structured.Rows.Add(item.Section, item.Subsection, item.Type, item.Key,
+                    structured.Rows.Add(item.Section, item.Key,
                         item.Cells != null && item.Cells.Count > 0
                             ? string.Join(" | ", item.Cells.Select(x => x.Key + "=" + x.Value))
-                            : string.Join(" | ", item.Values), item.Unit);
+                            : string.Join(" | ", item.Values), item.Unit, item.Confidence.ToString("0.0"),
+                        item.Warnings == null ? "" : string.Join(", ", item.Warnings));
 
                 layoutDebug.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
