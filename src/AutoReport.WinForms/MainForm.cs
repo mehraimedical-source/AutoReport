@@ -14,6 +14,7 @@ namespace AutoReport.WinForms
         private readonly PictureBox preview = new PictureBox();
         private readonly DataGridView observations = new DataGridView();
         private readonly TextBox rawText = new TextBox();
+        private readonly TextBox layoutDebug = new TextBox();
         private readonly DataGridView structured = new DataGridView();
         private readonly TextBox warnings = new TextBox();
         private readonly Label status = new Label();
@@ -68,6 +69,10 @@ namespace AutoReport.WinForms
             structureTab.Controls.Add(structured); tabs.TabPages.Insert(0, structureTab);
             tabs.SelectedTab = structureTab;
 
+            var layoutTab = new TabPage("Layout debug");
+            layoutDebug.Dock = DockStyle.Fill; layoutDebug.Multiline = true; layoutDebug.ScrollBars = ScrollBars.Both; layoutDebug.ReadOnly = true;
+            layoutDebug.Font = new Font(FontFamily.GenericMonospace, 9); layoutTab.Controls.Add(layoutDebug); tabs.TabPages.Add(layoutTab);
+
             var textTab = new TabPage("Raw OCR text");
             rawText.Dock = DockStyle.Fill; rawText.Multiline = true; rawText.ScrollBars = ScrollBars.Both; rawText.ReadOnly = true;
             rawText.Font = new Font(FontFamily.GenericMonospace, 10); textTab.Controls.Add(rawText); tabs.TabPages.Add(textTab);
@@ -103,7 +108,7 @@ namespace AutoReport.WinForms
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
-            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); rawText.Clear(); warnings.Clear();
+            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
             status.Text = "Running PaddleOCR...";
             try
             {
@@ -126,6 +131,11 @@ namespace AutoReport.WinForms
                             ? string.Join(" | ", item.Cells.Select(x => x.Key + "=" + x.Value))
                             : string.Join(" | ", item.Values), item.Unit);
 
+                layoutDebug.Text = string.Join(Environment.NewLine + Environment.NewLine,
+                    lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
+                    string.Join(Environment.NewLine, page.Lines.Select(line =>
+                        string.Format("X={0,5} Y={1,5} W={2,4} H={3,4} C={4,5:0.0}  {5}",
+                            line.X, line.Y, line.Width, line.Height, line.Confidence, line.Text)))));
                 rawText.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
                     string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
