@@ -40,6 +40,18 @@ namespace AutoReport
         public List<string> Warnings { get; set; } = new List<string>();
     }
 
+    public sealed class StructuredField
+    {
+        public string Section { get; set; }
+        public string Subsection { get; set; }
+        public string Type { get; set; }
+        public string Key { get; set; }
+        public List<string> Values { get; set; } = new List<string>();
+        public string Unit { get; set; }
+        public string RawText { get; set; }
+        public double Confidence { get; set; }
+    }
+
     public sealed class ReviewedValue
     {
         public string Key { get; set; }
@@ -58,6 +70,7 @@ namespace AutoReport
         public string CreatedUtc { get; set; } = DateTime.UtcNow.ToString("o");
         public List<SourcePage> Sources { get; set; } = new List<SourcePage>();
         public List<Observation> Observations { get; set; } = new List<Observation>();
+        public List<StructuredField> StructuredFields { get; set; } = new List<StructuredField>();
         public List<ReviewedValue> ReviewHistory { get; set; } = new List<ReviewedValue>();
         public List<string> Warnings { get; set; } = new List<string>();
 
