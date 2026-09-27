@@ -33,7 +33,7 @@ namespace AutoReport.Tests
             try
             {
                 TestExtraction(args.Length > 0 ? args[0] : "config/extraction.default.json");
-                TestTsv(); TestTemplates(temp); TestPipeline(temp).GetAwaiter().GetResult();
+                TestTsv(); TestStructuredDoppler(); TestTemplates(temp); TestPipeline(temp).GetAwaiter().GetResult();
                 TestProcessAdapter(temp).GetAwaiter().GetResult();
                 Console.WriteLine("PASS: " + count + " assertions."); return 0;
             }
@@ -79,6 +79,31 @@ namespace AutoReport.Tests
             Check(lines.Count == 2, "Do not merge different spatial blocks.");
             Check(lines[0].Text == "BPD 82.1 mm" && lines[0].Confidence == 72.3, "TSV word ordering and minimum confidence.");
             Check(lines[0].X == 10 && lines[0].Y == 20, "Coordinates map back to original image.");
+        }
+
+
+        private static void TestStructuredDoppler()
+        {
+            var page = new SourcePage();
+            Action<string,int,int,int> add = (text,x,y,w) => page.Lines.Add(new TextLine { Text=text, X=x, Y=y, Width=w, Height=22, Confidence=99 });
+            add("Rt. Uterine A",38,49,91); add("Last",290,51,37); add("1",379,52,17); add("2",456,52,17); add("3",536,52,16); add("Pctl.",763,51,38);
+            add("PGmean",40,73,63); add("0.98",290,72,36); add("0.98",370,72,34); add("mmHg",597,72,52);
+            add("S/D",39,92,33); add("2.75",290,92,36); add("2.75",370,92,34);
+            add("D/S",39,114,33); add("0.36",290,114,36); add("0.36",370,114,34);
+            add("RI",38,133,27); add("0.64",290,134,36); add("0.64",370,134,34); add("97.96*",758,134,46);
+            add("PI",38,155,27); add("1.11",290,155,35); add("1.11",370,155,34); add("90.18",760,155,42);
+            add("AccT",38,175,44); add("143",292,176,32); add("143",372,176,32); add("ms",610,179,28);
+            add("Acc",38,195,37); add("574.05",284,198,47); add("574.05",363,198,48); add("cm/s²",604,197,42);
+            add("DecT",39,219,43); add("414",292,219,32); add("414",371,219,32); add("ms",608,220,31);
+            add("Dec",39,239,36); add("198.84",285,240,46); add("198.84",364,240,47); add("cm/s²",603,239,43);
+            var fields = LayoutStructureExtractor.Extract(page);
+            var ri = fields.Single(x => x.Key == "RI");
+            var pi = fields.Single(x => x.Key == "PI");
+            Check(ri.Section == "Doppler.UterineArtery.Right", "Right uterine section must be canonical.");
+            Check(ri.Cells["Value"] == "0.64" && ri.Cells["Percentile"] == "97.96", "RI value and percentile reconstructed by coordinates.");
+            Check(pi.Cells["Value"] == "1.11" && pi.Cells["Percentile"] == "90.18", "PI value and percentile reconstructed by coordinates.");
+            Check(fields.Single(x => x.Key == "PGmean").Unit == "mmHg", "PGmean unit retained.");
+            Check(fields.Single(x => x.Key == "Acc").Cells["Value"] == "574.05", "Repeated Last/1 values collapse to one measurement.");
         }
 
         private static void TestTemplates(string temp)
