@@ -450,9 +450,18 @@ namespace AutoReport
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
             if (study.Observations.Count == 0 && study.StructuredFields.Count == 0)
                 study.Warnings.Add("No structured fields were recognized. Inspect raw OCR text.");
+            // Layout-aware structured rows are authoritative for table exports. The regex
+            // extractor may see Last/1/2/3 table cells as separate observations; those are
+            // repeated display cells, not independent clinical measurements.
+            var structuredKeys = new HashSet<string>(
+                study.StructuredFields.Select(x => x.Key ?? ""), StringComparer.OrdinalIgnoreCase);
             foreach (var field in study.Observations.GroupBy(x => x.Key))
+            {
+                string shortKey = (field.Key ?? "").Split('.').LastOrDefault() ?? "";
+                if (structuredKeys.Contains(shortKey)) continue;
                 if (field.Select(x => x.Value + "|" + x.Unit).Distinct().Count() > 1)
                     study.Warnings.Add("Conflicting candidates require review: " + field.Key);
+            }
             study.Warnings.Add("Confirm all input images belong to this examination; image filenames are not patient identity.");
             return study;
         }
