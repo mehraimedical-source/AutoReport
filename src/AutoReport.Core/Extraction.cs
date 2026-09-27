@@ -196,9 +196,31 @@ namespace AutoReport
                     break;
                 }
 
+                var named = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                // Ultrasound machines commonly use Last, 1, 2, 3 and Pctl. columns. Assign
+                // values by X position when a header row is visible; fall back to these canonical
+                // column names in reading order.
+                var headerNames = new[] { "Last", "1", "2", "3", "Pctl." };
+                var headers = cells.Where(x => headerNames.Any(h => string.Equals((x.Text ?? "").Trim(), h, StringComparison.OrdinalIgnoreCase))).ToList();
+                var valueCells = cells.Skip(i + 1).Take(Math.Max(0, j - i - 1)).Where(x => IsValue(x.Text)).ToList();
+                foreach (var valueCell in valueCells)
+                {
+                    TextLine nearest = null;
+                    double distance = double.MaxValue;
+                    foreach (var header in headers)
+                    {
+                        double d = Math.Abs((valueCell.X + valueCell.Width / 2.0) - (header.X + header.Width / 2.0));
+                        if (d < distance) { distance = d; nearest = header; }
+                    }
+                    string column = nearest == null ? null : (nearest.Text ?? "").Trim();
+                    if (string.IsNullOrWhiteSpace(column) || named.ContainsKey(column))
+                        column = headerNames.FirstOrDefault(h => !named.ContainsKey(h)) ?? ("Value" + (named.Count + 1));
+                    named[column] = RuleExtractor.NormalizeDigits((valueCell.Text ?? "").Trim());
+                }
+
                 output.Add(new StructuredField {
-                    Section = section, Subsection = subsection, Type = "Row", Key = text,
-                    Values = values, Unit = unit,
+                    Section = section, Subsection = subsection, Type = "TableRow", Key = text,
+                    Values = values, Cells = named, Unit = unit,
                     RawText = text + " " + string.Join(" ", values) + (unit.Length == 0 ? "" : " " + unit),
                     Confidence = cells.Skip(i).Take(Math.Max(1, j - i)).Min(x => x.Confidence)
                 });
