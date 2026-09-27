@@ -183,17 +183,38 @@ namespace AutoReport
             return rows.OrderBy(x => x.Y).ToList();
         }
 
-        private static bool LooksLikeHeader(VisualRow row)
+        private static bool LooksLikeHeader(List<VisualRow> rows, int index)
         {
+            var row = rows[index];
             if (row.Cells.Count < 2) return false;
-            // Header evidence comes only from OCR. It must be a horizontal band of short tokens,
-            // mostly non-units, and cannot look like a normal label+measurements data row.
-            var usable = row.Cells.Where(x => !IsUnit(x)).ToList();
+            var usable = row.Cells.Where(x => !IsUnit(x)).OrderBy(CenterX).ToList();
             if (usable.Count < 2) return false;
+
+            // Numeric column names such as 1/2/3 are valid header evidence. Distinguish a
+            // header from a measurement row by looking ahead: real data rows have a left
+            // textual label and numeric cells that align horizontally with header columns.
             int textual = usable.Count(x => !IsValue(x));
-            int shortTokens = usable.Count(x => T(x).Length > 0 && T(x).Length <= 12);
-            bool beginsWithTextAndHasSeveralValues = !IsValue(usable[0]) && usable.Skip(1).Count(IsValue) >= 2;
-            return shortTokens >= 2 && textual >= 1 && !beginsWithTextAndHasSeveralValues;
+            if (textual == 0 || usable.Count(x => T(x).Length > 0 && T(x).Length <= 16) < 2) return false;
+
+            var headerCenters = usable.Select(CenterX).ToList();
+            double spacing = headerCenters.Count > 1
+                ? headerCenters.Zip(headerCenters.Skip(1), (a,b) => b - a).Where(x => x > 0).DefaultIfEmpty(40.0).Average()
+                : 40.0;
+            double tolerance = Math.Max(18.0, spacing * 0.60);
+            int supportingRows = 0;
+
+            for (int i = index + 1; i < rows.Count && i <= index + 5; i++)
+            {
+                var next = rows[i];
+                var labels = next.Cells.Where(x => !IsValue(x) && !IsUnit(x)).OrderBy(CenterX).ToList();
+                var values = next.Cells.Where(IsValue).ToList();
+                if (labels.Count == 0 || values.Count == 0) continue;
+                if (CenterX(labels[0]) >= values.Min(CenterX)) continue;
+
+                int aligned = values.Count(v => headerCenters.Any(h => Math.Abs(h - CenterX(v)) <= tolerance));
+                if (aligned >= Math.Min(2, values.Count)) supportingRows++;
+            }
+            return supportingRows >= 1;
         }
 
         private static string FindSection(List<VisualRow> rows, int headerIndex)
@@ -255,7 +276,7 @@ namespace AutoReport
             TableContext active = null;
             for (int i = 0; i < rows.Count; i++)
             {
-                if (LooksLikeHeader(rows[i]))
+                if (LooksLikeHeader(rows, i))
                 {
                     active = new TableContext { Header = rows[i], HeaderY = rows[i].Y, Section = FindSection(rows, i) };
                     continue;
