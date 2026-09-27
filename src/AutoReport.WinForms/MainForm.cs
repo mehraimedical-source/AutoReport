@@ -14,6 +14,7 @@ namespace AutoReport.WinForms
         private readonly PictureBox preview = new PictureBox();
         private readonly DataGridView observations = new DataGridView();
         private readonly TextBox rawText = new TextBox();
+        private readonly DataGridView structured = new DataGridView();
         private readonly TextBox warnings = new TextBox();
         private readonly Label status = new Label();
         private readonly Button runButton = new Button();
@@ -65,6 +66,14 @@ namespace AutoReport.WinForms
             observations.Columns.Add("Confidence","OCR confidence"); observations.Columns.Add("Evidence","Evidence"); observations.Columns.Add("Warnings","Warnings");
             resultTab.Controls.Add(observations); tabs.TabPages.Add(resultTab);
 
+            var structureTab = new TabPage("Structured report");
+            structured.Dock = DockStyle.Fill; structured.ReadOnly = true; structured.AllowUserToAddRows = false;
+            structured.AllowUserToDeleteRows = false; structured.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            structured.Columns.Add("Section","Section"); structured.Columns.Add("Subsection","Subsection");
+            structured.Columns.Add("Type","Type"); structured.Columns.Add("Key","Key / Row");
+            structured.Columns.Add("Values","Values"); structured.Columns.Add("Unit","Unit");
+            structureTab.Controls.Add(structured); tabs.TabPages.Add(structureTab);
+
             var textTab = new TabPage("Raw OCR text");
             rawText.Dock = DockStyle.Fill; rawText.Multiline = true; rawText.ScrollBars = ScrollBars.Both; rawText.ReadOnly = true;
             rawText.Font = new Font(FontFamily.GenericMonospace, 10); textTab.Controls.Add(rawText); tabs.TabPages.Add(textTab);
@@ -100,7 +109,7 @@ namespace AutoReport.WinForms
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
-            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); rawText.Clear(); warnings.Clear();
+            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); rawText.Clear(); warnings.Clear();
             status.Text = "Running PaddleOCR...";
             try
             {
@@ -121,13 +130,19 @@ namespace AutoReport.WinForms
                     observations.Rows.Add(item.Key, item.Value, item.Unit, item.Confidence.ToString("0.0"),
                         item.Evidence, string.Join(", ", item.Warnings));
 
+                foreach (var item in lastStudy.StructuredFields)
+                    structured.Rows.Add(item.Section, item.Subsection, item.Type, item.Key,
+                        string.Join(" | ", item.Values), item.Unit);
+
                 rawText.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
                     string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
                 warnings.Text = string.Join(Environment.NewLine, lastStudy.Warnings);
                 saveButton.Enabled = true;
-                status.Text = "OCR complete - " + lastStudy.Observations.Count + " extracted candidate(s).";
-                if (lastStudy.Observations.Count == 0) MessageBox.Show(this, "OCR finished, but no configured fields matched. Check Raw OCR text.");
+                status.Text = "OCR complete - " + lastStudy.StructuredFields.Count + " structured item(s), " +
+                    lastStudy.Observations.Count + " configured candidate(s).";
+                if (lastStudy.StructuredFields.Count == 0 && lastStudy.Observations.Count == 0)
+                    MessageBox.Show(this, "OCR finished, but no structured fields were recognized. Check Raw OCR text.");
             }
             catch (Exception ex)
             {
