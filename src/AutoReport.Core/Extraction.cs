@@ -140,7 +140,7 @@ namespace AutoReport
     // OCR cells -> visual rows -> table/header detection -> cell assignment -> validation.
     public static class LayoutStructureExtractor
     {
-        private static readonly Regex Number = new Regex(@"^[+\\-]?\\d+(?:[.,]\\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
+        private static readonly Regex Number = new Regex(@"^[+\-]?\d+(?:[.,]\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
         private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
 
