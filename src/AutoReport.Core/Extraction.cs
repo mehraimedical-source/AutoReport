@@ -278,7 +278,30 @@ namespace AutoReport
             {
                 if (LooksLikeHeader(rows, i))
                 {
-                    active = new TableContext { Header = rows[i], HeaderY = rows[i].Y, Section = FindSection(rows, i) };
+                    var header = rows[i];
+                    string section = FindSection(rows, i);
+
+                    // Ultrasound exports often print the table title on the same horizontal
+                    // band as the column header. When the first textual cell is separated
+                    // from the remaining header cells by a large horizontal gap, preserve
+                    // it as the exact section title and exclude it from column assignment.
+                    var ordered = header.Cells.OrderBy(CenterX).ToList();
+                    if (ordered.Count >= 3 && !IsValue(ordered[0]) && !IsUnit(ordered[0]))
+                    {
+                        double firstGap = CenterX(ordered[1]) - CenterX(ordered[0]);
+                        var laterGaps = ordered.Skip(1).Zip(ordered.Skip(2), (a,b) => CenterX(b) - CenterX(a))
+                            .Where(x => x > 0).OrderBy(x => x).ToList();
+                        double typicalGap = laterGaps.Count == 0 ? 0 : laterGaps[laterGaps.Count / 2];
+                        if (firstGap > Math.Max(80.0, typicalGap * 1.8))
+                        {
+                            section = T(ordered[0]);
+                            var columnsOnly = new VisualRow();
+                            columnsOnly.Cells.AddRange(ordered.Skip(1));
+                            header = columnsOnly;
+                        }
+                    }
+
+                    active = new TableContext { Header = header, HeaderY = rows[i].Y, Section = section };
                     continue;
                 }
                 var field = ParseDataRow(rows[i], active);
