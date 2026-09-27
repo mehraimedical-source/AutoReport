@@ -40,6 +40,15 @@ namespace AutoReport
         public List<string> Warnings { get; set; } = new List<string>();
     }
 
+    public sealed class ReportTable
+    {
+        public string Section { get; set; }
+        public List<string> Columns { get; set; } = new List<string>();
+        public List<StructuredField> Rows { get; set; } = new List<StructuredField>();
+        public double Confidence { get; set; }
+        public List<string> Warnings { get; set; } = new List<string>();
+    }
+
     public sealed class StructuredField
     {
         public string Section { get; set; }
@@ -73,6 +82,7 @@ namespace AutoReport
         public List<SourcePage> Sources { get; set; } = new List<SourcePage>();
         public List<Observation> Observations { get; set; } = new List<Observation>();
         public List<StructuredField> StructuredFields { get; set; } = new List<StructuredField>();
+        public List<ReportTable> Tables { get; set; } = new List<ReportTable>();
         public List<ReviewedValue> ReviewHistory { get; set; } = new List<ReviewedValue>();
         public List<string> Warnings { get; set; } = new List<string>();
 
