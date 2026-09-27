@@ -275,6 +275,23 @@ namespace AutoReport
         }
     }
 
+    public static class UltrasoundTableBuilder
+    {
+        public static List<ReportTable> Build(IEnumerable<StructuredField> fields)
+        {
+            return fields.Where(x => string.Equals(x.Type, "TableRow", StringComparison.OrdinalIgnoreCase))
+                .GroupBy(x => x.Section ?? "", StringComparer.OrdinalIgnoreCase)
+                .Select(g => new ReportTable {
+                    Section = g.Key,
+                    Columns = g.SelectMany(x => x.Cells == null ? Enumerable.Empty<string>() : x.Cells.Keys)
+                        .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                    Rows = g.ToList(),
+                    Confidence = g.Count() == 0 ? 0 : g.Min(x => x.Confidence),
+                    Warnings = g.SelectMany(x => x.Warnings ?? new List<string>()).Distinct().ToList()
+                }).ToList();
+        }
+    }
+
     public static class Units
     {
         public static bool Compatible(string a, string b)
@@ -320,7 +337,9 @@ namespace AutoReport
                 {
                     page.Sha256 = hash; page.FileName = Path.GetFileName(path);
                     study.Sources.Add(page); study.Observations.AddRange(extractor.Extract(page));
-                    study.StructuredFields.AddRange(LayoutStructureExtractor.Extract(page));
+                    var canonical = LayoutStructureExtractor.Extract(page);
+                    study.StructuredFields.AddRange(canonical);
+                    study.Tables.AddRange(UltrasoundTableBuilder.Build(canonical));
                 }
             }
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
