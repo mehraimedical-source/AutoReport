@@ -334,6 +334,43 @@ namespace AutoReport
         }
     }
 
+    public static class EvidenceLayoutExtractor
+    {
+        private static double Cy(TextLine x) { return x.Y + x.Height / 2.0; }
+        private static bool Numeric(string s) { decimal d; return decimal.TryParse(RuleExtractor.NormalizeDigits((s ?? "").Trim()).TrimEnd('*','%'), NumberStyles.Any, CultureInfo.InvariantCulture, out d); }
+
+        public static void Extract(SourcePage page, Study study, IList<StructuredField> tableRows)
+        {
+            var used = new HashSet<TextLine>();
+            foreach (var row in tableRows)
+            {
+                foreach (var line in page.Lines)
+                    if (!string.IsNullOrWhiteSpace(row.RawText) && row.RawText.IndexOf((line.Text ?? "").Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
+                        used.Add(line);
+            }
+
+            // Generic label/value pairs: nearby OCR blocks on the same visual row.
+            var lines = page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)).OrderBy(x => x.Y).ThenBy(x => x.X).ToList();
+            foreach (var key in lines)
+            {
+                if (used.Contains(key) || Numeric(key.Text)) continue;
+                var value = lines.Where(v => v != key && !used.Contains(v) && v.X > key.X &&
+                    Math.Abs(Cy(v) - Cy(key)) <= Math.Max(6.0, Math.Max(key.Height, v.Height) * .65))
+                    .OrderBy(v => v.X - key.X).FirstOrDefault();
+                if (value == null || value.X - (key.X + key.Width) > 180) continue;
+                // Avoid treating table headers/units as ordinary metadata.
+                if (string.Equals(key.Text, "Last", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(key.Text, "Pctl.", StringComparison.OrdinalIgnoreCase)) continue;
+                study.Fields.Add(new ExtractedPair { Key = key.Text.Trim(), Value = value.Text.Trim(),
+                    RawText = key.Text.Trim() + " " + value.Text.Trim(), Confidence = Math.Min(key.Confidence, value.Confidence) });
+                used.Add(key); used.Add(value);
+            }
+
+            foreach (var line in lines.Where(x => !used.Contains(x)))
+                study.Unassigned.Add(new UnassignedText { Text = line.Text.Trim(), Confidence = line.Confidence, X = line.X, Y = line.Y });
+        }
+    }
+
     public static class UltrasoundTableBuilder
     {
         public static List<ReportTable> Build(IEnumerable<StructuredField> fields)
@@ -401,6 +438,7 @@ namespace AutoReport
                     var canonical = LayoutStructureExtractor.Extract(page);
                     study.StructuredFields.AddRange(canonical);
                     study.Tables.AddRange(UltrasoundTableBuilder.Build(canonical));
+                    EvidenceLayoutExtractor.Extract(page, study, canonical);
                 }
             }
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
