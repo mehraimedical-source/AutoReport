@@ -40,6 +40,15 @@ namespace AutoReport
         public List<string> Warnings { get; set; } = new List<string>();
     }
 
+    public sealed class KeyValueMeasurement
+    {
+        public string Value { get; set; }
+        public string Unit { get; set; }
+        public double Confidence { get; set; }
+        public string Evidence { get; set; }
+        public List<string> Warnings { get; set; } = new List<string>();
+    }
+
     public sealed class ReportTable
     {
         public string Section { get; set; }
@@ -84,6 +93,7 @@ namespace AutoReport
         public List<StructuredField> StructuredFields { get; set; } = new List<StructuredField>();
         public List<ReportTable> Tables { get; set; } = new List<ReportTable>();
         public List<ReviewedValue> ReviewHistory { get; set; } = new List<ReviewedValue>();
+        public Dictionary<string, KeyValueMeasurement> KeyValues { get; set; } = new Dictionary<string, KeyValueMeasurement>(StringComparer.OrdinalIgnoreCase);
         public List<string> Warnings { get; set; } = new List<string>();
 
         public void Approve(string observationId, string reviewer)
