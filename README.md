@@ -91,3 +91,24 @@ AutoReport.Cli.exe final C:\Reports\example.docx config\template.example.json C:
 - این مخزن شامل رابط گرافیکی تولیدی، نصب‌کنندهٔ موتور بومی و داشبورد هزار مرکز نیست. هسته برای اتصال به محصول موجود ارائه شده است.
 
 [نمونهٔ اتصال C#](docs/integration.md) و [روش اعتبارسنجی](docs/validation.md) را ببینید.
+
+
+## Offline ultrasound key/value extraction
+
+The WinForms application runs PaddleOCR locally; no cloud API is required. OCR blocks retain bounding boxes and confidence, then the core pipeline reconstructs rows, applies deterministic extraction rules, adds explicit Doppler side/vessel context when it is present in the image text, and emits `Study.KeyValues`.
+
+Example:
+
+```json
+"KeyValues": {
+  "Doppler.LeftUterineArtery.PI": {
+    "Value": "0.88",
+    "Unit": "",
+    "Confidence": 96.4,
+    "Evidence": "PI 0.88",
+    "Warnings": []
+  }
+}
+```
+
+Conflicting OCR candidates are not averaged. The highest-confidence candidate is retained and marked with `ConflictingCandidates` so medical measurements can be reviewed against the source image.
