@@ -358,6 +358,14 @@ namespace AutoReport
                     Math.Abs(Cy(v) - Cy(key)) <= Math.Max(6.0, Math.Max(key.Height, v.Height) * .65))
                     .OrderBy(v => v.X - key.X).FirstOrDefault();
                 if (value == null || value.X - (key.X + key.Width) > 180) continue;
+                // Do not flatten a table title + column header into a metadata key/value pair.
+                // A table title is already preserved verbatim as StructuredField.Section.
+                bool isTableSection = tableRows.Any(r => !string.IsNullOrWhiteSpace(r.Section) &&
+                    string.Equals(r.Section.Trim(), (key.Text ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
+                bool isTableHeader = tableRows.Any(r => r.Cells != null &&
+                    r.Cells.Keys.Any(h => string.Equals(h.Trim(), (value.Text ?? "").Trim(), StringComparison.OrdinalIgnoreCase)));
+                if (isTableSection && isTableHeader) { used.Add(key); used.Add(value); continue; }
+
                 // Avoid treating table headers/units as ordinary metadata.
                 if (string.Equals(key.Text, "Last", StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(key.Text, "Pctl.", StringComparison.OrdinalIgnoreCase)) continue;
