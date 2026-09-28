@@ -49,6 +49,22 @@ namespace AutoReport
         public List<string> Warnings { get; set; } = new List<string>();
     }
 
+    public sealed class ExtractedPair
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+        public string RawText { get; set; }
+        public double Confidence { get; set; }
+    }
+
+    public sealed class UnassignedText
+    {
+        public string Text { get; set; }
+        public double Confidence { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+    }
+
     public sealed class ReportTable
     {
         public string Section { get; set; }
@@ -89,6 +105,8 @@ namespace AutoReport
         public string StudyId { get; set; }
         public string CreatedUtc { get; set; } = DateTime.UtcNow.ToString("o");
         public List<SourcePage> Sources { get; set; } = new List<SourcePage>();
+        public List<ExtractedPair> Fields { get; set; } = new List<ExtractedPair>();
+        public List<UnassignedText> Unassigned { get; set; } = new List<UnassignedText>();
         public List<Observation> Observations { get; set; } = new List<Observation>();
         public List<StructuredField> StructuredFields { get; set; } = new List<StructuredField>();
         public List<ReportTable> Tables { get; set; } = new List<ReportTable>();
