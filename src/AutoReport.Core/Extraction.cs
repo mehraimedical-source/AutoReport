@@ -44,12 +44,12 @@ namespace AutoReport
         private static List<ExtractionLine> BuildExtractionLines(SourcePage page)
         {
             var indexed = page.Lines.Select((line, index) => new { Line = line, Index = index }).ToList();
-            // PaddleOCR returns table cells as separate blocks. Rebuild visual rows from bounding boxes
-            // before applying regex rules so "RI" and "0.64" can be matched on the same row.
             if (indexed.Count < 2 || indexed.Count(x => x.Line.Height > 0 || x.Line.Width > 0) < 2)
                 return indexed.Select(x => new ExtractionLine { Text = x.Line.Text ?? "", Evidence = x.Line.Text,
                     Confidence = x.Line.Confidence, LineIndex = x.Index }).ToList();
 
+            // Bounding boxes are authoritative. Ultrasound report exports commonly contain repeated
+            // values in Last/1 columns, so sequential OCR windows create false "conflicts".
             var rows = new List<List<Tuple<TextLine, int>>>();
             foreach (var item in indexed.OrderBy(x => x.Line.Y + x.Line.Height / 2.0))
             {
@@ -58,9 +58,9 @@ namespace AutoReport
                 double bestDistance = double.MaxValue;
                 foreach (var row in rows)
                 {
-                    double rowCenter = row.Average(x => (double)x.Item1.Y + (double)x.Item1.Height / 2.0);
+                    double rowCenter = row.Average(x => (double)x.Item1.Y + x.Item1.Height / 2.0);
                     double rowHeight = Math.Max(1.0, row.Average(x => (double)Math.Max(1, x.Item1.Height)));
-                    double tolerance = Math.Max(4.0, Math.Max(rowHeight, Math.Max(1, item.Line.Height)) * 0.60);
+                    double tolerance = Math.Max(5.0, Math.Max(rowHeight, Math.Max(1, item.Line.Height)) * 0.72);
                     double distance = Math.Abs(center - rowCenter);
                     if (distance <= tolerance && distance < bestDistance) { best = row; bestDistance = distance; }
                 }
@@ -77,20 +77,19 @@ namespace AutoReport
                     LineIndex = ordered.Count == 0 ? 0 : ordered.Min(x => x.Item2) };
             }).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
 
-            // Some PaddleOCR builds expose each table cell as an independent block and their
-            // bounding boxes are not reliable enough to reconstruct rows. Add short sequential
-            // windows as a fallback: e.g. "RI" + "0.64" becomes "RI 0.64".
-            // Rules are anchored to known field labels, so unrelated OCR text is ignored.
+            // Only use sequential fallback when bounding boxes produced no plausible multi-cell rows.
+            // This preserves support for OCR engines without useful geometry without polluting good Paddle layouts.
+            if (result.Any(x => x.Text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length >= 2))
+                return result;
+
             for (int i = 0; i < indexed.Count; i++)
             {
-                var parts = new List<string>();
-                double confidence = 100.0;
-                for (int j = i; j < indexed.Count && j < i + 4; j++)
+                var parts = new List<string>(); double confidence = 100.0;
+                for (int j = i; j < indexed.Count && j < i + 3; j++)
                 {
                     string part = indexed[j].Line.Text ?? "";
                     if (string.IsNullOrWhiteSpace(part)) continue;
-                    parts.Add(part.Trim());
-                    confidence = Math.Min(confidence, indexed[j].Line.Confidence);
+                    parts.Add(part.Trim()); confidence = Math.Min(confidence, indexed[j].Line.Confidence);
                     if (parts.Count >= 2)
                     {
                         string text = string.Join(" ", parts);
