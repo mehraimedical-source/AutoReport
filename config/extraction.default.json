@@ -160,6 +160,46 @@
       "Key": "Doppler.Unspecified.Dec",
       "Pattern": "^\\s*Dec\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)",
       "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.TAMV",
+      "Pattern": "^\\\\s*TAMV\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>cm/s|m/s)\\\\b",
+      "RequiredUnit": "cm/s"
+    },
+    {
+      "Key": "Doppler.Unspecified.TAPV",
+      "Pattern": "^\\\\s*TAPV\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>cm/s|m/s)\\\\b",
+      "RequiredUnit": "cm/s"
+    },
+    {
+      "Key": "Doppler.Unspecified.PGmax",
+      "Pattern": "^\\\\s*PGmax\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\b(?:.*?\\\\b(?<unit>mmHg)\\\\b)?",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Cardiac.Tei.IVCT",
+      "Pattern": "^\\\\s*IVCT\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.ET",
+      "Pattern": "^\\\\s*ET\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.IVRT",
+      "Pattern": "^\\\\s*IVRT\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.MCO",
+      "Pattern": "^\\\\s*MCO\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.Index",
+      "Pattern": "^\\\\s*Tei\\\\s+Index\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)",
+      "RequiredUnit": null
     }
   ]
 }
