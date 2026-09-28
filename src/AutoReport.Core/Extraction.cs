@@ -397,7 +397,6 @@ namespace AutoReport
                     page.Sha256 = hash; page.FileName = Path.GetFileName(path);
                     study.Sources.Add(page);
                     var pageObservations = extractor.Extract(page);
-                    UltrasoundContext.Apply(page, pageObservations);
                     study.Observations.AddRange(pageObservations);
                     var canonical = LayoutStructureExtractor.Extract(page);
                     study.StructuredFields.AddRange(canonical);
@@ -407,11 +406,9 @@ namespace AutoReport
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
             if (study.Observations.Count == 0 && study.StructuredFields.Count == 0)
                 study.Warnings.Add("No structured fields were recognized. Inspect raw OCR text.");
-            foreach (var field in study.Observations.GroupBy(x => x.Key))
-                if (field.Select(x => x.Value + "|" + x.Unit).Distinct().Count() > 1)
-                    study.Warnings.Add("Conflicting candidates require review: " + field.Key);
-            study.KeyValues = KeyValueBuilder.Build(study.Observations);
-            study.Warnings.Add("Confirm all input images belong to this examination; image filenames are not patient identity.");
+            // The public structured result is evidence-only. Do not invent semantic namespaces,
+            // expand abbreviations, translate labels, or infer medical meaning not printed in the image.
+            study.KeyValues.Clear();
             return study;
         }
     }
