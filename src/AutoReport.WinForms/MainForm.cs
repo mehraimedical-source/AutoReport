@@ -73,9 +73,10 @@ namespace AutoReport.WinForms
             var keyValueTab = new TabPage("Extracted data");
             keyValues.Dock = DockStyle.Fill; keyValues.ReadOnly = true; keyValues.AllowUserToAddRows = false;
             keyValues.AllowUserToDeleteRows = false; keyValues.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            keyValues.Columns.Add("Key", "Key");
-            keyValues.Columns.Add("Value", "Value");
-            keyValues.Columns.Add("Unit", "Unit");
+            keyValues.Columns.Add("Section", "Section (OCR)");
+            keyValues.Columns.Add("Key", "Key (OCR)");
+            keyValues.Columns.Add("Values", "Cells / Values");
+            keyValues.Columns.Add("Unit", "Unit (OCR)");
             keyValues.Columns.Add("Confidence", "Confidence");
             keyValues.Columns.Add("Evidence", "Evidence");
             keyValues.Columns.Add("Validation", "Validation");
@@ -145,11 +146,15 @@ namespace AutoReport.WinForms
                             : string.Join(" | ", item.Values), item.Unit, item.Confidence.ToString("0.0"),
                         item.Warnings == null ? "" : string.Join(", ", item.Warnings));
 
-                foreach (var pair in lastStudy.KeyValues.OrderBy(x => x.Key))
+                // Evidence-only view: every displayed label/value/unit comes from OCR/layout evidence.
+                // No abbreviation expansion or medical interpretation is performed here.
+                foreach (var item in lastStudy.StructuredFields.OrderBy(x => x.Section).ThenBy(x => x.Key))
                 {
-                    var item = pair.Value;
-                    keyValues.Rows.Add(pair.Key, item.Value, item.Unit,
-                        item.Confidence.ToString("0.0"), item.Evidence,
+                    string cells = item.Cells != null && item.Cells.Count > 0
+                        ? string.Join(" | ", item.Cells.Select(x => x.Key + "=" + x.Value))
+                        : string.Join(" | ", item.Values ?? new System.Collections.Generic.List<string>());
+                    keyValues.Rows.Add(item.Section, item.Key, cells, item.Unit,
+                        item.Confidence.ToString("0.0"), item.RawText,
                         item.Warnings == null ? "" : string.Join(", ", item.Warnings));
                 }
 
@@ -163,7 +168,7 @@ namespace AutoReport.WinForms
                     string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
                 warnings.Text = string.Join(Environment.NewLine, lastStudy.Warnings);
                 saveButton.Enabled = true;
-                status.Text = "Analysis complete - " + lastStudy.KeyValues.Count + " key/value(s), " + lastStudy.StructuredFields.Count + " table row(s).";
+                status.Text = "Analysis complete - " + lastStudy.StructuredFields.Count + " evidence-backed field(s).";
                 if (lastStudy.StructuredFields.Count == 0 && lastStudy.Observations.Count == 0)
                     MessageBox.Show(this, "OCR finished, but no structured fields were recognized. Check Raw OCR text.");
             }
