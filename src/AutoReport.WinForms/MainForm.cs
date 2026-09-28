@@ -16,6 +16,7 @@ namespace AutoReport.WinForms
         private readonly TextBox rawText = new TextBox();
         private readonly TextBox layoutDebug = new TextBox();
         private readonly DataGridView structured = new DataGridView();
+        private readonly DataGridView keyValues = new DataGridView();
         private readonly TextBox warnings = new TextBox();
         private readonly Label status = new Label();
         private readonly Button runButton = new Button();
@@ -69,6 +70,18 @@ namespace AutoReport.WinForms
             structureTab.Controls.Add(structured); tabs.TabPages.Insert(0, structureTab);
             tabs.SelectedTab = structureTab;
 
+            var keyValueTab = new TabPage("Extracted data");
+            keyValues.Dock = DockStyle.Fill; keyValues.ReadOnly = true; keyValues.AllowUserToAddRows = false;
+            keyValues.AllowUserToDeleteRows = false; keyValues.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            keyValues.Columns.Add("Key", "Key");
+            keyValues.Columns.Add("Value", "Value");
+            keyValues.Columns.Add("Unit", "Unit");
+            keyValues.Columns.Add("Confidence", "Confidence");
+            keyValues.Columns.Add("Evidence", "Evidence");
+            keyValues.Columns.Add("Validation", "Validation");
+            keyValueTab.Controls.Add(keyValues); tabs.TabPages.Insert(0, keyValueTab);
+            tabs.SelectedTab = keyValueTab;
+
             var layoutTab = new TabPage("Layout debug");
             layoutDebug.Dock = DockStyle.Fill; layoutDebug.Multiline = true; layoutDebug.ScrollBars = ScrollBars.Both; layoutDebug.ReadOnly = true;
             layoutDebug.Font = new Font(FontFamily.GenericMonospace, 9); layoutTab.Controls.Add(layoutDebug); tabs.TabPages.Add(layoutTab);
@@ -108,7 +121,7 @@ namespace AutoReport.WinForms
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
-            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
+            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); keyValues.Rows.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
             status.Text = "Running PaddleOCR...";
             try
             {
@@ -132,6 +145,14 @@ namespace AutoReport.WinForms
                             : string.Join(" | ", item.Values), item.Unit, item.Confidence.ToString("0.0"),
                         item.Warnings == null ? "" : string.Join(", ", item.Warnings));
 
+                foreach (var pair in lastStudy.KeyValues.OrderBy(x => x.Key))
+                {
+                    var item = pair.Value;
+                    keyValues.Rows.Add(pair.Key, item.Value, item.Unit,
+                        item.Confidence.ToString("0.0"), item.Evidence,
+                        item.Warnings == null ? "" : string.Join(", ", item.Warnings));
+                }
+
                 layoutDebug.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
                     string.Join(Environment.NewLine, page.Lines.Select(line =>
@@ -142,7 +163,7 @@ namespace AutoReport.WinForms
                     string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
                 warnings.Text = string.Join(Environment.NewLine, lastStudy.Warnings);
                 saveButton.Enabled = true;
-                status.Text = "OCR complete - " + lastStudy.StructuredFields.Count + " structured item(s).";
+                status.Text = "Analysis complete - " + lastStudy.KeyValues.Count + " key/value(s), " + lastStudy.StructuredFields.Count + " table row(s).";
                 if (lastStudy.StructuredFields.Count == 0 && lastStudy.Observations.Count == 0)
                     MessageBox.Show(this, "OCR finished, but no structured fields were recognized. Check Raw OCR text.");
             }
