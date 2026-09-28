@@ -17,6 +17,8 @@ namespace AutoReport.WinForms
         private readonly TextBox layoutDebug = new TextBox();
         private readonly DataGridView structured = new DataGridView();
         private readonly DataGridView keyValues = new DataGridView();
+        private readonly DataGridView fields = new DataGridView();
+        private readonly DataGridView unassigned = new DataGridView();
         private readonly TextBox warnings = new TextBox();
         private readonly Label status = new Label();
         private readonly Button runButton = new Button();
@@ -83,6 +85,20 @@ namespace AutoReport.WinForms
             keyValueTab.Controls.Add(keyValues); tabs.TabPages.Insert(0, keyValueTab);
             tabs.SelectedTab = keyValueTab;
 
+            var fieldsTab = new TabPage("Fields");
+            fields.Dock = DockStyle.Fill; fields.ReadOnly = true; fields.AllowUserToAddRows = false;
+            fields.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            fields.Columns.Add("Key","Key (OCR)"); fields.Columns.Add("Value","Value (OCR)");
+            fields.Columns.Add("Confidence","Confidence"); fields.Columns.Add("Evidence","Evidence");
+            fieldsTab.Controls.Add(fields); tabs.TabPages.Add(fieldsTab);
+
+            var unassignedTab = new TabPage("Unassigned OCR");
+            unassigned.Dock = DockStyle.Fill; unassigned.ReadOnly = true; unassigned.AllowUserToAddRows = false;
+            unassigned.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            unassigned.Columns.Add("Text","Text"); unassigned.Columns.Add("Confidence","Confidence");
+            unassigned.Columns.Add("X","X"); unassigned.Columns.Add("Y","Y");
+            unassignedTab.Controls.Add(unassigned); tabs.TabPages.Add(unassignedTab);
+
             var layoutTab = new TabPage("Layout debug");
             layoutDebug.Dock = DockStyle.Fill; layoutDebug.Multiline = true; layoutDebug.ScrollBars = ScrollBars.Both; layoutDebug.ReadOnly = true;
             layoutDebug.Font = new Font(FontFamily.GenericMonospace, 9); layoutTab.Controls.Add(layoutDebug); tabs.TabPages.Add(layoutTab);
@@ -122,7 +138,7 @@ namespace AutoReport.WinForms
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
-            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); keyValues.Rows.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
+            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); keyValues.Rows.Clear(); fields.Rows.Clear(); unassigned.Rows.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
             status.Text = "Running PaddleOCR...";
             try
             {
@@ -158,6 +174,11 @@ namespace AutoReport.WinForms
                         item.Warnings == null ? "" : string.Join(", ", item.Warnings));
                 }
 
+                foreach (var item in lastStudy.Fields)
+                    fields.Rows.Add(item.Key, item.Value, item.Confidence.ToString("0.0"), item.RawText);
+                foreach (var item in lastStudy.Unassigned)
+                    unassigned.Rows.Add(item.Text, item.Confidence.ToString("0.0"), item.X, item.Y);
+
                 layoutDebug.Text = string.Join(Environment.NewLine + Environment.NewLine,
                     lastStudy.Sources.Select(page => "[" + page.Pass + "]" + Environment.NewLine +
                     string.Join(Environment.NewLine, page.Lines.Select(line =>
@@ -168,7 +189,7 @@ namespace AutoReport.WinForms
                     string.Join(Environment.NewLine, page.Lines.Select(line => line.Text))));
                 warnings.Text = string.Join(Environment.NewLine, lastStudy.Warnings);
                 saveButton.Enabled = true;
-                status.Text = "Analysis complete - " + lastStudy.StructuredFields.Count + " evidence-backed field(s).";
+                status.Text = "Analysis complete - " + lastStudy.Fields.Count + " field(s), " + lastStudy.StructuredFields.Count + " table row(s), " + lastStudy.Unassigned.Count + " unassigned OCR item(s).";
                 if (lastStudy.StructuredFields.Count == 0 && lastStudy.Observations.Count == 0)
                     MessageBox.Show(this, "OCR finished, but no structured fields were recognized. Check Raw OCR text.");
             }
