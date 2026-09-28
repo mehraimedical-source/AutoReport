@@ -36,10 +36,10 @@ namespace AutoReport
                 .GroupBy(x => x.Key, StringComparer.OrdinalIgnoreCase))
             {
                 // Never silently average medical measurements. Keep the strongest OCR candidate and flag conflicts.
-                var best = group.OrderByDescending(x => x.Confidence).ThenBy(x => x.Warnings == null ? 0 : x.Warnings.Count).First();
+                var best = group.OrderBy(x => x.Warnings == null ? 0 : x.Warnings.Count).ThenByDescending(x => x.Confidence).First();
                 var warnings = (best.Warnings ?? new List<string>()).ToList();
-                if (group.Select(x => (x.Value ?? "") + "|" + (x.Unit ?? "")).Distinct(StringComparer.OrdinalIgnoreCase).Count() > 1)
-                    warnings.Add("ConflictingCandidates");
+                var distinct = group.Select(x => (x.Value ?? "") + "|" + (x.Unit ?? "")).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                if (distinct.Count > 1) warnings.Add("ConflictingCandidates");
 
                 result[group.Key] = new KeyValueMeasurement {
                     Value = best.Value, Unit = best.Unit ?? "", Confidence = best.Confidence,
