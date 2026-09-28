@@ -159,6 +159,11 @@ namespace AutoReport
         private static string T(TextLine x) { return (x.Text ?? "").Trim(); }
         private static bool IsValue(TextLine x) { return IsValue(T(x)); }
         private static bool IsValue(string x) { return Number.IsMatch(RuleExtractor.NormalizeDigits((x ?? "").Trim())); }
+        private static bool IsPercentileValue(string x)
+        {
+            x = RuleExtractor.NormalizeDigits((x ?? "").Trim());
+            return Regex.IsMatch(x, @"^[+\-]?\d+(?:[.,]\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
+        }
         private static bool IsUnit(TextLine x) { return Units.Contains(T(x)); }
         private static double CenterX(TextLine x) { return x.X + x.Width / 2.0; }
         private static double CenterY(TextLine x) { return x.Y + x.Height / 2.0; }
@@ -231,6 +236,15 @@ namespace AutoReport
             return "";
         }
 
+        private static List<TextLine> HeaderColumns(VisualRow header)
+        {
+            // The first cell of these exports is often the section title, not a data column.
+            var cells = header.Cells.Where(x => !IsUnit(x)).OrderBy(CenterX).ToList();
+            if (cells.Count >= 2 && !IsValue(cells[0]) && CenterX(cells[0]) < CenterX(cells[1]) - 80)
+                cells.RemoveAt(0);
+            return cells;
+        }
+
         private static StructuredField ParseDataRow(VisualRow row, TableContext table)
         {
             if (table == null || table.Header == null || row.Y <= table.HeaderY) return null;
@@ -242,7 +256,7 @@ namespace AutoReport
             var label = labels.OrderBy(x => x.X).First();
             if (CenterX(label) >= values.Min(CenterX)) return null;
 
-            var headers = table.Header.Cells.Where(x => !IsUnit(x)).OrderBy(CenterX).ToList();
+            var headers = HeaderColumns(table.Header);
             var mapped = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
             var warnings = new List<string>();
             foreach (var value in values)
@@ -252,8 +266,10 @@ namespace AutoReport
                 if (ranked.Count == 0) { warnings.Add("NoHeaderForCell:" + T(value)); continue; }
                 var nearest = ranked[0];
                 // Reject implausibly distant matches instead of inventing a column assignment.
-                double typicalWidth = Math.Max(12.0, headers.Average(h => (double)Math.Max(1, h.Width)));
-                if (nearest.Distance > typicalWidth * 3.0) { warnings.Add("AmbiguousColumn:" + T(value)); continue; }
+                double typicalSpacing = headers.Count > 1
+                    ? headers.Zip(headers.Skip(1), (a,b) => CenterX(b) - CenterX(a)).Where(x => x > 0).DefaultIfEmpty(60.0).Average()
+                    : 80.0;
+                if (nearest.Distance > Math.Max(45.0, typicalSpacing * 0.75)) { warnings.Add("AmbiguousColumn:" + T(value)); continue; }
                 string column = T(nearest.Header);
                 if (mapped.ContainsKey(column)) { warnings.Add("DuplicateColumn:" + column); continue; }
                 mapped[column] = RuleExtractor.NormalizeDigits(T(value));
