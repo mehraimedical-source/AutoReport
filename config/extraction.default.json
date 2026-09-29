@@ -160,6 +160,169 @@
       "Key": "Doppler.Unspecified.Dec",
       "Pattern": "^\\s*Dec\\s*[:=|]?\\s*(?<value>\\d+(?:\\.\\d+)?)",
       "RequiredUnit": null
+    },
+    {
+      "Key": "Doppler.Unspecified.TAMV",
+      "Pattern": "^\\\\s*TAMV\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>cm/s|m/s)\\\\b",
+      "RequiredUnit": "cm/s"
+    },
+    {
+      "Key": "Doppler.Unspecified.TAPV",
+      "Pattern": "^\\\\s*TAPV\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>cm/s|m/s)\\\\b",
+      "RequiredUnit": "cm/s"
+    },
+    {
+      "Key": "Doppler.Unspecified.PGmax",
+      "Pattern": "^\\\\s*PGmax\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\b(?:.*?\\\\b(?<unit>mmHg)\\\\b)?",
+      "RequiredUnit": null
+    },
+    {
+      "Key": "Cardiac.Tei.IVCT",
+      "Pattern": "^\\\\s*IVCT\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.ET",
+      "Pattern": "^\\\\s*ET\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.IVRT",
+      "Pattern": "^\\\\s*IVRT\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.MCO",
+      "Pattern": "^\\\\s*MCO\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)\\\\s*(?<unit>ms)\\\\b",
+      "RequiredUnit": "ms"
+    },
+    {
+      "Key": "Cardiac.Tei.Index",
+      "Pattern": "^\\\\s*Tei\\\\s+Index\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)",
+      "RequiredUnit": null
+    }
+  ],
+  "Keywords": [
+    {
+      "Key": "Name",
+      "Match": [
+        "Name"
+      ],
+      "Kind": "field"
+    },
+    {
+      "Key": "ID",
+      "Match": [
+        "ID"
+      ],
+      "Kind": "field"
+    },
+    {
+      "Key": "Exam. Date",
+      "Match": [
+        "Exam. Date",
+        "Exam Date",
+        "Exam.Date"
+      ],
+      "Kind": "field"
+    },
+    {
+      "Key": "PGmean",
+      "Match": [
+        "PGmean"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "PGmax",
+      "Match": [
+        "PGmax"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "S/D",
+      "Match": [
+        "S/D"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "D/S",
+      "Match": [
+        "D/S"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "RI",
+      "Match": [
+        "RI"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "PI",
+      "Match": [
+        "PI"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "PSV",
+      "Match": [
+        "PSV"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "EDV",
+      "Match": [
+        "EDV"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "TAMV",
+      "Match": [
+        "TAMV"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "TAPV",
+      "Match": [
+        "TAPV"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "AccT",
+      "Match": [
+        "AccT"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "Acc",
+      "Match": [
+        "Acc"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "DecT",
+      "Match": [
+        "DecT"
+      ],
+      "Kind": "measurement"
+    },
+    {
+      "Key": "Dec",
+      "Match": [
+        "Dec"
+      ],
+      "Kind": "measurement"
     }
   ]
 }

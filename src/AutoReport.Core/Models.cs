@@ -40,6 +40,31 @@ namespace AutoReport
         public List<string> Warnings { get; set; } = new List<string>();
     }
 
+    public sealed class KeyValueMeasurement
+    {
+        public string Value { get; set; }
+        public string Unit { get; set; }
+        public double Confidence { get; set; }
+        public string Evidence { get; set; }
+        public List<string> Warnings { get; set; } = new List<string>();
+    }
+
+    public sealed class ExtractedPair
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+        public string RawText { get; set; }
+        public double Confidence { get; set; }
+    }
+
+    public sealed class UnassignedText
+    {
+        public string Text { get; set; }
+        public double Confidence { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+    }
+
     public sealed class ReportTable
     {
         public string Section { get; set; }
@@ -80,10 +105,13 @@ namespace AutoReport
         public string StudyId { get; set; }
         public string CreatedUtc { get; set; } = DateTime.UtcNow.ToString("o");
         public List<SourcePage> Sources { get; set; } = new List<SourcePage>();
+        public List<ExtractedPair> Fields { get; set; } = new List<ExtractedPair>();
+        public List<UnassignedText> Unassigned { get; set; } = new List<UnassignedText>();
         public List<Observation> Observations { get; set; } = new List<Observation>();
         public List<StructuredField> StructuredFields { get; set; } = new List<StructuredField>();
         public List<ReportTable> Tables { get; set; } = new List<ReportTable>();
         public List<ReviewedValue> ReviewHistory { get; set; } = new List<ReviewedValue>();
+        public Dictionary<string, KeyValueMeasurement> KeyValues { get; set; } = new Dictionary<string, KeyValueMeasurement>(StringComparer.OrdinalIgnoreCase);
         public List<string> Warnings { get; set; } = new List<string>();
 
         public void Approve(string observationId, string reviewer)
@@ -114,11 +142,20 @@ namespace AutoReport
         public string RequiredUnit { get; set; }
     }
 
+    public sealed class KeywordDefinition
+    {
+        public string Key { get; set; }
+        public List<string> Match { get; set; } = new List<string>();
+        // "field" = ordinary key/value metadata; "measurement" = one or more values laid out in columns.
+        public string Kind { get; set; } = "field";
+    }
+
     public sealed class ExtractionProfile
     {
         public string Name { get; set; }
         public double LowConfidenceThreshold { get; set; } = 85;
         public List<ExtractionRule> Rules { get; set; } = new List<ExtractionRule>();
+        public List<KeywordDefinition> Keywords { get; set; } = new List<KeywordDefinition>();
     }
 
     public sealed class TemplateBinding

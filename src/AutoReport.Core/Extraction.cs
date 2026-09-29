@@ -44,12 +44,12 @@ namespace AutoReport
         private static List<ExtractionLine> BuildExtractionLines(SourcePage page)
         {
             var indexed = page.Lines.Select((line, index) => new { Line = line, Index = index }).ToList();
-            // PaddleOCR returns table cells as separate blocks. Rebuild visual rows from bounding boxes
-            // before applying regex rules so "RI" and "0.64" can be matched on the same row.
             if (indexed.Count < 2 || indexed.Count(x => x.Line.Height > 0 || x.Line.Width > 0) < 2)
                 return indexed.Select(x => new ExtractionLine { Text = x.Line.Text ?? "", Evidence = x.Line.Text,
                     Confidence = x.Line.Confidence, LineIndex = x.Index }).ToList();
 
+            // Bounding boxes are authoritative. Ultrasound report exports commonly contain repeated
+            // values in Last/1 columns, so sequential OCR windows create false "conflicts".
             var rows = new List<List<Tuple<TextLine, int>>>();
             foreach (var item in indexed.OrderBy(x => x.Line.Y + x.Line.Height / 2.0))
             {
@@ -58,9 +58,9 @@ namespace AutoReport
                 double bestDistance = double.MaxValue;
                 foreach (var row in rows)
                 {
-                    double rowCenter = row.Average(x => (double)x.Item1.Y + (double)x.Item1.Height / 2.0);
+                    double rowCenter = row.Average(x => (double)x.Item1.Y + x.Item1.Height / 2.0);
                     double rowHeight = Math.Max(1.0, row.Average(x => (double)Math.Max(1, x.Item1.Height)));
-                    double tolerance = Math.Max(4.0, Math.Max(rowHeight, Math.Max(1, item.Line.Height)) * 0.60);
+                    double tolerance = Math.Max(5.0, Math.Max(rowHeight, Math.Max(1, item.Line.Height)) * 0.72);
                     double distance = Math.Abs(center - rowCenter);
                     if (distance <= tolerance && distance < bestDistance) { best = row; bestDistance = distance; }
                 }
@@ -77,20 +77,19 @@ namespace AutoReport
                     LineIndex = ordered.Count == 0 ? 0 : ordered.Min(x => x.Item2) };
             }).Where(x => !string.IsNullOrWhiteSpace(x.Text)).ToList();
 
-            // Some PaddleOCR builds expose each table cell as an independent block and their
-            // bounding boxes are not reliable enough to reconstruct rows. Add short sequential
-            // windows as a fallback: e.g. "RI" + "0.64" becomes "RI 0.64".
-            // Rules are anchored to known field labels, so unrelated OCR text is ignored.
+            // Only use sequential fallback when bounding boxes produced no plausible multi-cell rows.
+            // This preserves support for OCR engines without useful geometry without polluting good Paddle layouts.
+            if (result.Any(x => x.Text.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length >= 2))
+                return result;
+
             for (int i = 0; i < indexed.Count; i++)
             {
-                var parts = new List<string>();
-                double confidence = 100.0;
-                for (int j = i; j < indexed.Count && j < i + 4; j++)
+                var parts = new List<string>(); double confidence = 100.0;
+                for (int j = i; j < indexed.Count && j < i + 3; j++)
                 {
                     string part = indexed[j].Line.Text ?? "";
                     if (string.IsNullOrWhiteSpace(part)) continue;
-                    parts.Add(part.Trim());
-                    confidence = Math.Min(confidence, indexed[j].Line.Confidence);
+                    parts.Add(part.Trim()); confidence = Math.Min(confidence, indexed[j].Line.Confidence);
                     if (parts.Count >= 2)
                     {
                         string text = string.Join(" ", parts);
@@ -160,6 +159,11 @@ namespace AutoReport
         private static string T(TextLine x) { return (x.Text ?? "").Trim(); }
         private static bool IsValue(TextLine x) { return IsValue(T(x)); }
         private static bool IsValue(string x) { return Number.IsMatch(RuleExtractor.NormalizeDigits((x ?? "").Trim())); }
+        private static bool IsPercentileValue(string x)
+        {
+            x = RuleExtractor.NormalizeDigits((x ?? "").Trim());
+            return Regex.IsMatch(x, @"^[+\-]?\d+(?:[.,]\d+)?(?:[%*])?$", RegexOptions.CultureInvariant);
+        }
         private static bool IsUnit(TextLine x) { return Units.Contains(T(x)); }
         private static double CenterX(TextLine x) { return x.X + x.Width / 2.0; }
         private static double CenterY(TextLine x) { return x.Y + x.Height / 2.0; }
@@ -232,6 +236,15 @@ namespace AutoReport
             return "";
         }
 
+        private static List<TextLine> HeaderColumns(VisualRow header)
+        {
+            // The first cell of these exports is often the section title, not a data column.
+            var cells = header.Cells.Where(x => !IsUnit(x)).OrderBy(CenterX).ToList();
+            if (cells.Count >= 2 && !IsValue(cells[0]) && CenterX(cells[0]) < CenterX(cells[1]) - 80)
+                cells.RemoveAt(0);
+            return cells;
+        }
+
         private static StructuredField ParseDataRow(VisualRow row, TableContext table)
         {
             if (table == null || table.Header == null || row.Y <= table.HeaderY) return null;
@@ -243,7 +256,7 @@ namespace AutoReport
             var label = labels.OrderBy(x => x.X).First();
             if (CenterX(label) >= values.Min(CenterX)) return null;
 
-            var headers = table.Header.Cells.Where(x => !IsUnit(x)).OrderBy(CenterX).ToList();
+            var headers = HeaderColumns(table.Header);
             var mapped = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
             var warnings = new List<string>();
             foreach (var value in values)
@@ -253,8 +266,10 @@ namespace AutoReport
                 if (ranked.Count == 0) { warnings.Add("NoHeaderForCell:" + T(value)); continue; }
                 var nearest = ranked[0];
                 // Reject implausibly distant matches instead of inventing a column assignment.
-                double typicalWidth = Math.Max(12.0, headers.Average(h => (double)Math.Max(1, h.Width)));
-                if (nearest.Distance > typicalWidth * 3.0) { warnings.Add("AmbiguousColumn:" + T(value)); continue; }
+                double typicalSpacing = headers.Count > 1
+                    ? headers.Zip(headers.Skip(1), (a,b) => CenterX(b) - CenterX(a)).Where(x => x > 0).DefaultIfEmpty(60.0).Average()
+                    : 80.0;
+                if (nearest.Distance > Math.Max(45.0, typicalSpacing * 0.75)) { warnings.Add("AmbiguousColumn:" + T(value)); continue; }
                 string column = T(nearest.Header);
                 if (mapped.ContainsKey(column)) { warnings.Add("DuplicateColumn:" + column); continue; }
                 mapped[column] = RuleExtractor.NormalizeDigits(T(value));
@@ -319,6 +334,82 @@ namespace AutoReport
         }
     }
 
+    public static class KeywordGeometryExtractor
+    {
+        private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
+        private static double Cx(TextLine x) { return x.X + x.Width / 2.0; }
+        private static double Cy(TextLine x) { return x.Y + x.Height / 2.0; }
+        private static bool Number(string text) { decimal d; return decimal.TryParse(RuleExtractor.NormalizeDigits((text ?? "").Trim()).TrimEnd('*','%'), NumberStyles.Any, CultureInfo.InvariantCulture, out d); }
+        private static KeywordDefinition MatchKeyword(string text, ExtractionProfile p)
+        {
+            string t=(text??"").Trim();
+            return (p.Keywords??new List<KeywordDefinition>()).FirstOrDefault(k => (k.Match??new List<string>())
+                .Concat(new[]{k.Key}).Where(x=>!string.IsNullOrWhiteSpace(x)).Any(x=>string.Equals(x.Trim(),t,StringComparison.OrdinalIgnoreCase)));
+        }
+        private static bool SameRow(TextLine a, TextLine b) { return Math.Abs(Cy(a)-Cy(b)) <= 5.5; }
+
+        public static void Extract(SourcePage page, Study study, ExtractionProfile profile)
+        {
+            var lines=page.Lines.Where(x=>!string.IsNullOrWhiteSpace(x.Text)).OrderBy(x=>x.Y).ThenBy(x=>x.X).ToList();
+            var kw=lines.Select(x=>new{Line=x,Def=MatchKeyword(x.Text,profile)}).Where(x=>x.Def!=null).ToList();
+            var consumed=new HashSet<TextLine>();
+
+            foreach(var item in kw.Where(x=>string.Equals(x.Def.Kind,"field",StringComparison.OrdinalIgnoreCase)))
+            {
+                var key=item.Line;
+                var value=lines.Where(v=>v!=key && v.X>key.X && SameRow(key,v) && MatchKeyword(v.Text,profile)==null)
+                    .OrderBy(v=>v.X).FirstOrDefault();
+                if(value==null || value.X-(key.X+key.Width)>190) continue;
+                study.Fields.Add(new ExtractedPair{Key=key.Text.Trim(),Value=value.Text.Trim(),RawText=key.Text.Trim()+" "+value.Text.Trim(),Confidence=Math.Min(key.Confidence,value.Confidence)});
+                consumed.Add(key); consumed.Add(value);
+            }
+
+            var measurements=kw.Where(x=>string.Equals(x.Def.Kind,"measurement",StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Line.Y).ToList();
+            if(measurements.Count>0)
+            {
+                var first=measurements.First().Line;
+                // Header band = nearest row above first measurement containing at least two cells to its right.
+                var bands=lines.Where(x=>x.Y<first.Y && first.Y-x.Y<80)
+                    .GroupBy(x=>(int)Math.Round(Cy(x)/12.0)).Select(g=>g.OrderBy(Cx).ToList())
+                    .Where(g=>g.Count(x=>x.X>first.X+first.Width)>=2).OrderByDescending(g=>g.Average(x=>Cy(x))).ToList();
+                var headerBand=bands.FirstOrDefault()??new List<TextLine>();
+                // The left-most text in this band is the table title. Everything to its right is a column anchor.
+                var sectionCell=headerBand.Where(x=>x.X < 180 && MatchKeyword(x.Text,profile)==null && !Number(x.Text))
+                    .OrderBy(x=>x.X).FirstOrDefault();
+                var headerCells=headerBand.Where(x=>x!=sectionCell && x.X>180).OrderBy(Cx).ToList();
+                string section=sectionCell==null?"":sectionCell.Text.Trim();
+                foreach(var h in headerBand) consumed.Add(h);
+
+                foreach(var item in measurements)
+                {
+                    var key=item.Line;
+                    var values=lines.Where(v=>v!=key && v.X>key.X && Number(v.Text) && SameRow(key,v)).OrderBy(Cx).ToList();
+                    if(values.Count==0) continue;
+                    var unit=lines.Where(v=>v.X>key.X && Units.Contains((v.Text??"").Trim()) && SameRow(key,v)).OrderBy(v=>Math.Abs(Cy(v)-Cy(key))).FirstOrDefault();
+                    var cells=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+                    int fallback=1;
+                    foreach(var v in values)
+                    {
+                        var h=headerCells.OrderBy(x=>Math.Abs(Cx(x)-Cx(v))).FirstOrDefault();
+                        string col=h!=null && Math.Abs(Cx(h)-Cx(v))<=60 ? h.Text.Trim() : "Value"+fallback++;
+                        if(!cells.ContainsKey(col)) cells[col]=RuleExtractor.NormalizeDigits(v.Text.Trim());
+                    }
+                    var evidence=new[]{key.Text}.Concat(values.Select(v=>v.Text)).Concat(unit==null?new string[0]:new[]{unit.Text});
+                    study.StructuredFields.Add(new StructuredField{Section=section,Type="TableRow",Key=key.Text.Trim(),Cells=cells,
+                        Values=cells.Values.ToList(),Unit=unit==null?"":unit.Text.Trim(),RawText=string.Join(" ",evidence),
+                        Confidence=new[]{key.Confidence}.Concat(values.Select(v=>v.Confidence)).Concat(unit==null?new double[0]:new[]{unit.Confidence}).Min()});
+                    consumed.Add(key); foreach(var v in values) consumed.Add(v); if(unit!=null) consumed.Add(unit);
+                }
+                if(sectionCell!=null) consumed.Add(sectionCell);
+            }
+
+            study.Tables.AddRange(UltrasoundTableBuilder.Build(study.StructuredFields));
+            foreach(var line in lines.Where(x=>!consumed.Contains(x)))
+                study.Unassigned.Add(new UnassignedText{Text=line.Text.Trim(),Confidence=line.Confidence,X=line.X,Y=line.Y});
+        }
+    }
+
     public static class UltrasoundTableBuilder
     {
         public static List<ReportTable> Build(IEnumerable<StructuredField> fields)
@@ -360,8 +451,13 @@ namespace AutoReport
     {
         private readonly IImageTextReader reader;
         private readonly RuleExtractor extractor;
+        private readonly ExtractionProfile profile;
         public AutoReportEngine(IImageTextReader reader, ExtractionProfile profile)
-        { this.reader = reader ?? throw new ArgumentNullException(nameof(reader)); extractor = new RuleExtractor(profile); }
+        {
+            this.reader = reader ?? throw new ArgumentNullException(nameof(reader));
+            this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
+            extractor = new RuleExtractor(profile);
+        }
 
         // One call is ONE examination, never a batch of unrelated patients.
         public async Task<Study> ExtractAsync(string studyId, IEnumerable<string> images, CancellationToken token = default(CancellationToken))
@@ -380,19 +476,18 @@ namespace AutoReport
                 foreach (var page in pages)
                 {
                     page.Sha256 = hash; page.FileName = Path.GetFileName(path);
-                    study.Sources.Add(page); study.Observations.AddRange(extractor.Extract(page));
-                    var canonical = LayoutStructureExtractor.Extract(page);
-                    study.StructuredFields.AddRange(canonical);
-                    study.Tables.AddRange(UltrasoundTableBuilder.Build(canonical));
+                    study.Sources.Add(page);
+                    var pageObservations = extractor.Extract(page);
+                    study.Observations.AddRange(pageObservations);
+                    KeywordGeometryExtractor.Extract(page, study, profile);
                 }
             }
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
             if (study.Observations.Count == 0 && study.StructuredFields.Count == 0)
                 study.Warnings.Add("No structured fields were recognized. Inspect raw OCR text.");
-            foreach (var field in study.Observations.GroupBy(x => x.Key))
-                if (field.Select(x => x.Value + "|" + x.Unit).Distinct().Count() > 1)
-                    study.Warnings.Add("Conflicting candidates require review: " + field.Key);
-            study.Warnings.Add("Confirm all input images belong to this examination; image filenames are not patient identity.");
+            // The public structured result is evidence-only. Do not invent semantic namespaces,
+            // expand abbreviations, translate labels, or infer medical meaning not printed in the image.
+            study.KeyValues.Clear();
             return study;
         }
     }
