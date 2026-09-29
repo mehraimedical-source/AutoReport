@@ -146,6 +146,8 @@ namespace AutoReport
     {
         public string Key { get; set; }
         public List<string> Match { get; set; } = new List<string>();
+        // "field" = ordinary key/value metadata; "measurement" = one or more values laid out in columns.
+        public string Kind { get; set; } = "field";
     }
 
     public sealed class ExtractionProfile
