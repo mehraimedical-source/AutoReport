@@ -347,7 +347,7 @@ namespace AutoReport
             return (p.Keywords??new List<KeywordDefinition>()).FirstOrDefault(k => (k.Match??new List<string>())
                 .Concat(new[]{k.Key}).Where(x=>!string.IsNullOrWhiteSpace(x)).Any(x=>string.Equals(x.Trim(),t,StringComparison.OrdinalIgnoreCase)));
         }
-        private static bool SameRow(TextLine a, TextLine b) { return Math.Abs(Cy(a)-Cy(b)) <= Math.Max(8.0, Math.Max(a.Height,b.Height)*.85); }
+        private static bool SameRow(TextLine a, TextLine b) { return Math.Abs(Cy(a)-Cy(b)) <= 5.5; }
 
         public static void Extract(SourcePage page, Study study, ExtractionProfile profile)
         {
@@ -371,7 +371,7 @@ namespace AutoReport
                 var first=measurements.First().Line;
                 // Header band = nearest row above first measurement containing at least two cells to its right.
                 var bands=lines.Where(x=>x.Y<first.Y && first.Y-x.Y<80)
-                    .GroupBy(x=>(int)Math.Round(Cy(x)/8.0)).Select(g=>g.OrderBy(Cx).ToList())
+                    .GroupBy(x=>(int)Math.Round(Cy(x)/12.0)).Select(g=>g.OrderBy(Cx).ToList())
                     .Where(g=>g.Count(x=>x.X>first.X+first.Width)>=2).OrderByDescending(g=>g.Average(x=>Cy(x))).ToList();
                 var headerBand=bands.FirstOrDefault()??new List<TextLine>();
                 var headerCells=headerBand.Where(x=>x.X>first.X+first.Width).OrderBy(Cx).ToList();
