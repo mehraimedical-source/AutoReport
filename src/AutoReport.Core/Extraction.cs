@@ -374,8 +374,10 @@ namespace AutoReport
                     .GroupBy(x=>(int)Math.Round(Cy(x)/12.0)).Select(g=>g.OrderBy(Cx).ToList())
                     .Where(g=>g.Count(x=>x.X>first.X+first.Width)>=2).OrderByDescending(g=>g.Average(x=>Cy(x))).ToList();
                 var headerBand=bands.FirstOrDefault()??new List<TextLine>();
-                var headerCells=headerBand.Where(x=>x.X>first.X+first.Width).OrderBy(Cx).ToList();
-                var sectionCell=headerBand.Where(x=>x.X<=first.X+first.Width && MatchKeyword(x.Text,profile)==null).OrderBy(x=>x.X).FirstOrDefault();
+                // The left-most text in this band is the table title. Everything to its right is a column anchor.
+                var sectionCell=headerBand.Where(x=>x.X < 180 && MatchKeyword(x.Text,profile)==null && !Number(x.Text))
+                    .OrderBy(x=>x.X).FirstOrDefault();
+                var headerCells=headerBand.Where(x=>x!=sectionCell && x.X>180).OrderBy(Cx).ToList();
                 string section=sectionCell==null?"":sectionCell.Text.Trim();
                 foreach(var h in headerBand) consumed.Add(h);
 
