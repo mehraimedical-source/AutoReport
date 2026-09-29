@@ -201,5 +201,111 @@
       "Pattern": "^\\\\s*Tei\\\\s+Index\\\\s*[:=|]?\\\\s*(?<value>\\\\d+(?:\\\\.\\\\d+)?)",
       "RequiredUnit": null
     }
+  ],
+  "Keywords": [
+    {
+      "Key": "Name",
+      "Match": [
+        "Name"
+      ]
+    },
+    {
+      "Key": "ID",
+      "Match": [
+        "ID"
+      ]
+    },
+    {
+      "Key": "Exam. Date",
+      "Match": [
+        "Exam. Date",
+        "Exam Date",
+        "Exam.Date"
+      ]
+    },
+    {
+      "Key": "PGmean",
+      "Match": [
+        "PGmean"
+      ]
+    },
+    {
+      "Key": "PGmax",
+      "Match": [
+        "PGmax"
+      ]
+    },
+    {
+      "Key": "S/D",
+      "Match": [
+        "S/D"
+      ]
+    },
+    {
+      "Key": "D/S",
+      "Match": [
+        "D/S"
+      ]
+    },
+    {
+      "Key": "RI",
+      "Match": [
+        "RI"
+      ]
+    },
+    {
+      "Key": "PI",
+      "Match": [
+        "PI"
+      ]
+    },
+    {
+      "Key": "PSV",
+      "Match": [
+        "PSV"
+      ]
+    },
+    {
+      "Key": "EDV",
+      "Match": [
+        "EDV"
+      ]
+    },
+    {
+      "Key": "TAMV",
+      "Match": [
+        "TAMV"
+      ]
+    },
+    {
+      "Key": "TAPV",
+      "Match": [
+        "TAPV"
+      ]
+    },
+    {
+      "Key": "AccT",
+      "Match": [
+        "AccT"
+      ]
+    },
+    {
+      "Key": "Acc",
+      "Match": [
+        "Acc"
+      ]
+    },
+    {
+      "Key": "DecT",
+      "Match": [
+        "DecT"
+      ]
+    },
+    {
+      "Key": "Dec",
+      "Match": [
+        "Dec"
+      ]
+    }
   ]
 }
