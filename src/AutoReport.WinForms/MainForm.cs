@@ -13,6 +13,7 @@ namespace AutoReport.WinForms
         private readonly TextBox imagePath = new TextBox();
         private readonly PictureBox preview = new PictureBox();
         private readonly DataGridView observations = new DataGridView();
+        private readonly TextBox resultView = new TextBox();
         private readonly TextBox rawText = new TextBox();
         private readonly TextBox layoutDebug = new TextBox();
         private readonly DataGridView structured = new DataGridView();
@@ -63,6 +64,12 @@ namespace AutoReport.WinForms
             split.Panel1.Controls.Add(preview);
 
             var tabs = new TabControl { Dock = DockStyle.Fill }; split.Panel2.Controls.Add(tabs);
+            var resultTab = new TabPage("Result");
+            resultView.Dock = DockStyle.Fill; resultView.Multiline = true; resultView.ScrollBars = ScrollBars.Both;
+            resultView.ReadOnly = true; resultView.WordWrap = false; resultView.Font = new Font(FontFamily.GenericMonospace, 10);
+            resultTab.Controls.Add(resultView); tabs.TabPages.Add(resultTab);
+            tabs.SelectedTab = resultTab;
+
             var structureTab = new TabPage("Structured report");
             structured.Dock = DockStyle.Fill; structured.ReadOnly = true; structured.AllowUserToAddRows = false;
             structured.AllowUserToDeleteRows = false; structured.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
@@ -138,7 +145,7 @@ namespace AutoReport.WinForms
         private async Task RunOcrAsync()
         {
             if (!File.Exists(imagePath.Text)) { MessageBox.Show(this, "Select an image first."); return; }
-            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); keyValues.Rows.Clear(); fields.Rows.Clear(); unassigned.Rows.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
+            runButton.Enabled = false; saveButton.Enabled = false; observations.Rows.Clear(); structured.Rows.Clear(); keyValues.Rows.Clear(); fields.Rows.Clear(); unassigned.Rows.Clear(); resultView.Clear(); rawText.Clear(); layoutDebug.Clear(); warnings.Clear();
             status.Text = "Running PaddleOCR...";
             try
             {
@@ -173,6 +180,29 @@ namespace AutoReport.WinForms
                         item.Confidence.ToString("0.0"), item.RawText,
                         item.Warnings == null ? "" : string.Join(", ", item.Warnings));
                 }
+
+                var resultLines = new System.Collections.Generic.List<string>();
+                resultLines.Add("[Fields]");
+                foreach (var item in lastStudy.Fields)
+                    resultLines.Add(item.Key + " = " + item.Value);
+                foreach (var table in lastStudy.Tables)
+                {
+                    resultLines.Add("");
+                    resultLines.Add("[" + (string.IsNullOrWhiteSpace(table.Section) ? "Table" : table.Section) + "]");
+                    foreach (var row in table.Rows)
+                    {
+                        string cells = row.Cells == null ? "" : string.Join(" | ", row.Cells.Select(x => x.Key + "=" + x.Value));
+                        string unit = string.IsNullOrWhiteSpace(row.Unit) ? "" : " | Unit=" + row.Unit;
+                        resultLines.Add(row.Key + " | " + cells + unit);
+                    }
+                }
+                if (lastStudy.Unassigned.Count > 0)
+                {
+                    resultLines.Add("");
+                    resultLines.Add("[Unassigned OCR]");
+                    foreach (var item in lastStudy.Unassigned) resultLines.Add(item.Text);
+                }
+                resultView.Text = string.Join(Environment.NewLine, resultLines);
 
                 foreach (var item in lastStudy.Fields)
                     fields.Rows.Add(item.Key, item.Value, item.Confidence.ToString("0.0"), item.RawText);
