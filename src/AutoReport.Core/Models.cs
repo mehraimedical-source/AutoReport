@@ -142,11 +142,18 @@ namespace AutoReport
         public string RequiredUnit { get; set; }
     }
 
+    public sealed class KeywordDefinition
+    {
+        public string Key { get; set; }
+        public List<string> Match { get; set; } = new List<string>();
+    }
+
     public sealed class ExtractionProfile
     {
         public string Name { get; set; }
         public double LowConfidenceThreshold { get; set; } = 85;
         public List<ExtractionRule> Rules { get; set; } = new List<ExtractionRule>();
+        public List<KeywordDefinition> Keywords { get; set; } = new List<KeywordDefinition>();
     }
 
     public sealed class TemplateBinding
