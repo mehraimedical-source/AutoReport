@@ -371,8 +371,7 @@ namespace AutoReport
                     .OrderBy(v => v.X - key.X).FirstOrDefault();
                 if (right == null || right.X - (key.X + key.Width) > 190) continue;
 
-                // Numeric measurement keywords are handled below as table/sequence rows.
-                if (Number(right.Text) && keywordLines.Any(k => k.Line.Y > key.Y + key.Height / 2)) continue;
+                if (!string.Equals(item.Def.Kind, "field", StringComparison.OrdinalIgnoreCase)) continue;
                 study.Fields.Add(new ExtractedPair { Key = key.Text.Trim(), Value = right.Text.Trim(),
                     RawText = key.Text.Trim() + " " + right.Text.Trim(), Confidence = Math.Min(key.Confidence, right.Confidence) });
                 consumed.Add(key); consumed.Add(right);
@@ -383,6 +382,7 @@ namespace AutoReport
             var measurementRows = new List<StructuredField>();
             foreach (var item in keywordLines)
             {
+                if (!string.Equals(item.Def.Kind, "measurement", StringComparison.OrdinalIgnoreCase)) continue;
                 var key = item.Line;
                 var values = lines.Where(v => v != key && v.X > key.X && Number(v.Text) &&
                     Math.Abs(Cy(v) - Cy(key)) <= Math.Max(7.0, Math.Max(key.Height, v.Height) * .72))
