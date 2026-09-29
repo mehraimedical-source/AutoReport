@@ -338,94 +338,73 @@ namespace AutoReport
     {
         private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
-
         private static double Cx(TextLine x) { return x.X + x.Width / 2.0; }
         private static double Cy(TextLine x) { return x.Y + x.Height / 2.0; }
-        private static bool Number(string text)
+        private static bool Number(string text) { decimal d; return decimal.TryParse(RuleExtractor.NormalizeDigits((text ?? "").Trim()).TrimEnd('*','%'), NumberStyles.Any, CultureInfo.InvariantCulture, out d); }
+        private static KeywordDefinition MatchKeyword(string text, ExtractionProfile p)
         {
-            decimal d;
-            text = RuleExtractor.NormalizeDigits((text ?? "").Trim()).TrimEnd('*', '%');
-            return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out d);
+            string t=(text??"").Trim();
+            return (p.Keywords??new List<KeywordDefinition>()).FirstOrDefault(k => (k.Match??new List<string>())
+                .Concat(new[]{k.Key}).Where(x=>!string.IsNullOrWhiteSpace(x)).Any(x=>string.Equals(x.Trim(),t,StringComparison.OrdinalIgnoreCase)));
         }
-        private static KeywordDefinition MatchKeyword(string text, ExtractionProfile profile)
-        {
-            string t = (text ?? "").Trim();
-            return (profile.Keywords ?? new List<KeywordDefinition>()).FirstOrDefault(k =>
-                (k.Match ?? new List<string>()).Concat(new[] { k.Key }).Where(x => !string.IsNullOrWhiteSpace(x))
-                .Any(x => string.Equals(x.Trim(), t, StringComparison.OrdinalIgnoreCase)));
-        }
+        private static bool SameRow(TextLine a, TextLine b) { return Math.Abs(Cy(a)-Cy(b)) <= Math.Max(8.0, Math.Max(a.Height,b.Height)*.85); }
 
         public static void Extract(SourcePage page, Study study, ExtractionProfile profile)
         {
-            var lines = page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)).OrderBy(x => x.Y).ThenBy(x => x.X).ToList();
-            var keywordLines = lines.Select(x => new { Line = x, Def = MatchKeyword(x.Text, profile) })
-                .Where(x => x.Def != null).ToList();
-            var consumed = new HashSet<TextLine>();
+            var lines=page.Lines.Where(x=>!string.IsNullOrWhiteSpace(x.Text)).OrderBy(x=>x.Y).ThenBy(x=>x.X).ToList();
+            var kw=lines.Select(x=>new{Line=x,Def=MatchKeyword(x.Text,profile)}).Where(x=>x.Def!=null).ToList();
+            var consumed=new HashSet<TextLine>();
 
-            // Simple metadata: keyword -> nearest non-keyword token on the same visual row.
-            foreach (var item in keywordLines)
+            foreach(var item in kw.Where(x=>string.Equals(x.Def.Kind,"field",StringComparison.OrdinalIgnoreCase)))
             {
-                var key = item.Line;
-                var right = lines.Where(v => v != key && v.X > key.X && MatchKeyword(v.Text, profile) == null &&
-                    Math.Abs(Cy(v) - Cy(key)) <= Math.Max(6.0, Math.Max(key.Height, v.Height) * .65))
-                    .OrderBy(v => v.X - key.X).FirstOrDefault();
-                if (right == null || right.X - (key.X + key.Width) > 190) continue;
-
-                if (!string.Equals(item.Def.Kind, "field", StringComparison.OrdinalIgnoreCase)) continue;
-                study.Fields.Add(new ExtractedPair { Key = key.Text.Trim(), Value = right.Text.Trim(),
-                    RawText = key.Text.Trim() + " " + right.Text.Trim(), Confidence = Math.Min(key.Confidence, right.Confidence) });
-                consumed.Add(key); consumed.Add(right);
+                var key=item.Line;
+                var value=lines.Where(v=>v!=key && v.X>key.X && SameRow(key,v) && MatchKeyword(v.Text,profile)==null)
+                    .OrderBy(v=>v.X).FirstOrDefault();
+                if(value==null || value.X-(key.X+key.Width)>190) continue;
+                study.Fields.Add(new ExtractedPair{Key=key.Text.Trim(),Value=value.Text.Trim(),RawText=key.Text.Trim()+" "+value.Text.Trim(),Confidence=Math.Min(key.Confidence,value.Confidence)});
+                consumed.Add(key); consumed.Add(value);
             }
 
-            // Measurement rows: keyword followed by every numeric token on the same Y band.
-            // Column names are discovered from the nearest header band above; no medical meaning is inferred.
-            var measurementRows = new List<StructuredField>();
-            foreach (var item in keywordLines)
+            var measurements=kw.Where(x=>string.Equals(x.Def.Kind,"measurement",StringComparison.OrdinalIgnoreCase)).OrderBy(x=>x.Line.Y).ToList();
+            if(measurements.Count>0)
             {
-                if (!string.Equals(item.Def.Kind, "measurement", StringComparison.OrdinalIgnoreCase)) continue;
-                var key = item.Line;
-                var values = lines.Where(v => v != key && v.X > key.X && Number(v.Text) &&
-                    Math.Abs(Cy(v) - Cy(key)) <= Math.Max(7.0, Math.Max(key.Height, v.Height) * .72))
-                    .OrderBy(v => v.X).ToList();
-                if (values.Count == 0) continue;
+                var first=measurements.First().Line;
+                // Header band = nearest row above first measurement containing at least two cells to its right.
+                var bands=lines.Where(x=>x.Y<first.Y && first.Y-x.Y<80)
+                    .GroupBy(x=>(int)Math.Round(Cy(x)/8.0)).Select(g=>g.OrderBy(Cx).ToList())
+                    .Where(g=>g.Count(x=>x.X>first.X+first.Width)>=2).OrderByDescending(g=>g.Average(x=>Cy(x))).ToList();
+                var headerBand=bands.FirstOrDefault()??new List<TextLine>();
+                var headerCells=headerBand.Where(x=>x.X>first.X+first.Width).OrderBy(Cx).ToList();
+                var sectionCell=headerBand.Where(x=>x.X<=first.X+first.Width && MatchKeyword(x.Text,profile)==null).OrderBy(x=>x.X).FirstOrDefault();
+                string section=sectionCell==null?"":sectionCell.Text.Trim();
+                foreach(var h in headerBand) consumed.Add(h);
 
-                var unit = lines.Where(v => v.X > key.X && Units.Contains((v.Text ?? "").Trim()) &&
-                    Math.Abs(Cy(v) - Cy(key)) <= Math.Max(8.0, Math.Max(key.Height, v.Height) * .85))
-                    .OrderBy(v => Math.Abs(Cy(v) - Cy(key))).FirstOrDefault();
-
-                var above = lines.Where(h => h.Y < key.Y && h.X > key.X && !Number(h.Text) &&
-                    MatchKeyword(h.Text, profile) == null && !Units.Contains((h.Text ?? "").Trim()) &&
-                    key.Y - h.Y < 100).ToList();
-                // Numeric headers such as 1/2/3 are valid headers too.
-                above.AddRange(lines.Where(h => h.Y < key.Y && h.X > key.X && Number(h.Text) && key.Y - h.Y < 100));
-                var headers = above.GroupBy(h => (int)(Cy(h) / 8)).OrderByDescending(g => g.Count())
-                    .Select(g => g.OrderBy(Cx).ToList()).FirstOrDefault() ?? new List<TextLine>();
-
-                var cells = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var v in values)
+                foreach(var item in measurements)
                 {
-                    var h = headers.OrderBy(x => Math.Abs(Cx(x) - Cx(v))).FirstOrDefault();
-                    string column = h != null && Math.Abs(Cx(h) - Cx(v)) < 55 ? h.Text.Trim() : "Value" + (cells.Count + 1);
-                    if (!cells.ContainsKey(column)) cells[column] = RuleExtractor.NormalizeDigits(v.Text.Trim());
+                    var key=item.Line;
+                    var values=lines.Where(v=>v!=key && v.X>key.X && Number(v.Text) && SameRow(key,v)).OrderBy(Cx).ToList();
+                    if(values.Count==0) continue;
+                    var unit=lines.Where(v=>v.X>key.X && Units.Contains((v.Text??"").Trim()) && SameRow(key,v)).OrderBy(v=>Math.Abs(Cy(v)-Cy(key))).FirstOrDefault();
+                    var cells=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+                    int fallback=1;
+                    foreach(var v in values)
+                    {
+                        var h=headerCells.OrderBy(x=>Math.Abs(Cx(x)-Cx(v))).FirstOrDefault();
+                        string col=h!=null && Math.Abs(Cx(h)-Cx(v))<=60 ? h.Text.Trim() : "Value"+fallback++;
+                        if(!cells.ContainsKey(col)) cells[col]=RuleExtractor.NormalizeDigits(v.Text.Trim());
+                    }
+                    var evidence=new[]{key.Text}.Concat(values.Select(v=>v.Text)).Concat(unit==null?new string[0]:new[]{unit.Text});
+                    study.StructuredFields.Add(new StructuredField{Section=section,Type="TableRow",Key=key.Text.Trim(),Cells=cells,
+                        Values=cells.Values.ToList(),Unit=unit==null?"":unit.Text.Trim(),RawText=string.Join(" ",evidence),
+                        Confidence=new[]{key.Confidence}.Concat(values.Select(v=>v.Confidence)).Concat(unit==null?new double[0]:new[]{unit.Confidence}).Min()});
+                    consumed.Add(key); foreach(var v in values) consumed.Add(v); if(unit!=null) consumed.Add(unit);
                 }
-                string section = "";
-                var title = lines.Where(t => t.Y < key.Y && t.X <= key.X + 20 && MatchKeyword(t.Text, profile) == null &&
-                    !Number(t.Text) && !Units.Contains((t.Text ?? "").Trim()) && key.Y - t.Y < 100)
-                    .OrderByDescending(t => t.Y).FirstOrDefault();
-                if (title != null) section = title.Text.Trim();
-
-                var field = new StructuredField { Section = section, Type = "TableRow", Key = key.Text.Trim(),
-                    Cells = cells, Values = cells.Values.ToList(), Unit = unit == null ? "" : unit.Text.Trim(),
-                    RawText = string.Join(" ", new[] { key.Text }.Concat(values.Select(v => v.Text)).Concat(unit == null ? new string[0] : new[] { unit.Text })),
-                    Confidence = new[] { key.Confidence }.Concat(values.Select(v => v.Confidence)).Min() };
-                measurementRows.Add(field);
-                consumed.Add(key); foreach (var v in values) consumed.Add(v); if (unit != null) consumed.Add(unit);
+                if(sectionCell!=null) consumed.Add(sectionCell);
             }
 
-            study.StructuredFields.AddRange(measurementRows);
-            study.Tables.AddRange(UltrasoundTableBuilder.Build(measurementRows));
-            foreach (var line in lines.Where(x => !consumed.Contains(x)))
-                study.Unassigned.Add(new UnassignedText { Text = line.Text.Trim(), Confidence = line.Confidence, X = line.X, Y = line.Y });
+            study.Tables.AddRange(UltrasoundTableBuilder.Build(study.StructuredFields));
+            foreach(var line in lines.Where(x=>!consumed.Contains(x)))
+                study.Unassigned.Add(new UnassignedText{Text=line.Text.Trim(),Confidence=line.Confidence,X=line.X,Y=line.Y});
         }
     }
 
