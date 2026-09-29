@@ -334,47 +334,97 @@ namespace AutoReport
         }
     }
 
-    public static class EvidenceLayoutExtractor
+    public static class KeywordGeometryExtractor
     {
+        private static readonly HashSet<string> Units = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "mm", "cm", "m", "ms", "s", "g", "kg", "bpm", "hz", "mhz", "mmhg", "cm/s", "m/s", "cm/s²", "cm/s2", "%" };
+
+        private static double Cx(TextLine x) { return x.X + x.Width / 2.0; }
         private static double Cy(TextLine x) { return x.Y + x.Height / 2.0; }
-        private static bool Numeric(string s) { decimal d; return decimal.TryParse(RuleExtractor.NormalizeDigits((s ?? "").Trim()).TrimEnd('*','%'), NumberStyles.Any, CultureInfo.InvariantCulture, out d); }
-
-        public static void Extract(SourcePage page, Study study, IList<StructuredField> tableRows)
+        private static bool Number(string text)
         {
-            var used = new HashSet<TextLine>();
-            foreach (var row in tableRows)
-            {
-                foreach (var line in page.Lines)
-                    if (!string.IsNullOrWhiteSpace(row.RawText) && row.RawText.IndexOf((line.Text ?? "").Trim(), StringComparison.OrdinalIgnoreCase) >= 0)
-                        used.Add(line);
-            }
+            decimal d;
+            text = RuleExtractor.NormalizeDigits((text ?? "").Trim()).TrimEnd('*', '%');
+            return decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out d);
+        }
+        private static KeywordDefinition MatchKeyword(string text, ExtractionProfile profile)
+        {
+            string t = (text ?? "").Trim();
+            return (profile.Keywords ?? new List<KeywordDefinition>()).FirstOrDefault(k =>
+                (k.Match ?? new List<string>()).Concat(new[] { k.Key }).Where(x => !string.IsNullOrWhiteSpace(x))
+                .Any(x => string.Equals(x.Trim(), t, StringComparison.OrdinalIgnoreCase)));
+        }
 
-            // Generic label/value pairs: nearby OCR blocks on the same visual row.
+        public static void Extract(SourcePage page, Study study, ExtractionProfile profile)
+        {
             var lines = page.Lines.Where(x => !string.IsNullOrWhiteSpace(x.Text)).OrderBy(x => x.Y).ThenBy(x => x.X).ToList();
-            foreach (var key in lines)
+            var keywordLines = lines.Select(x => new { Line = x, Def = MatchKeyword(x.Text, profile) })
+                .Where(x => x.Def != null).ToList();
+            var consumed = new HashSet<TextLine>();
+
+            // Simple metadata: keyword -> nearest non-keyword token on the same visual row.
+            foreach (var item in keywordLines)
             {
-                if (used.Contains(key) || Numeric(key.Text)) continue;
-                var value = lines.Where(v => v != key && !used.Contains(v) && v.X > key.X &&
+                var key = item.Line;
+                var right = lines.Where(v => v != key && v.X > key.X && MatchKeyword(v.Text, profile) == null &&
                     Math.Abs(Cy(v) - Cy(key)) <= Math.Max(6.0, Math.Max(key.Height, v.Height) * .65))
                     .OrderBy(v => v.X - key.X).FirstOrDefault();
-                if (value == null || value.X - (key.X + key.Width) > 180) continue;
-                // Do not flatten a table title + column header into a metadata key/value pair.
-                // A table title is already preserved verbatim as StructuredField.Section.
-                bool isTableSection = tableRows.Any(r => !string.IsNullOrWhiteSpace(r.Section) &&
-                    string.Equals(r.Section.Trim(), (key.Text ?? "").Trim(), StringComparison.OrdinalIgnoreCase));
-                bool isTableHeader = tableRows.Any(r => r.Cells != null &&
-                    r.Cells.Keys.Any(h => string.Equals(h.Trim(), (value.Text ?? "").Trim(), StringComparison.OrdinalIgnoreCase)));
-                if (isTableSection && isTableHeader) { used.Add(key); used.Add(value); continue; }
+                if (right == null || right.X - (key.X + key.Width) > 190) continue;
 
-                // Avoid treating table headers/units as ordinary metadata.
-                if (string.Equals(key.Text, "Last", StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(key.Text, "Pctl.", StringComparison.OrdinalIgnoreCase)) continue;
-                study.Fields.Add(new ExtractedPair { Key = key.Text.Trim(), Value = value.Text.Trim(),
-                    RawText = key.Text.Trim() + " " + value.Text.Trim(), Confidence = Math.Min(key.Confidence, value.Confidence) });
-                used.Add(key); used.Add(value);
+                // Numeric measurement keywords are handled below as table/sequence rows.
+                if (Number(right.Text) && keywordLines.Any(k => k.Line.Y > key.Y + key.Height / 2)) continue;
+                study.Fields.Add(new ExtractedPair { Key = key.Text.Trim(), Value = right.Text.Trim(),
+                    RawText = key.Text.Trim() + " " + right.Text.Trim(), Confidence = Math.Min(key.Confidence, right.Confidence) });
+                consumed.Add(key); consumed.Add(right);
             }
 
-            foreach (var line in lines.Where(x => !used.Contains(x)))
+            // Measurement rows: keyword followed by every numeric token on the same Y band.
+            // Column names are discovered from the nearest header band above; no medical meaning is inferred.
+            var measurementRows = new List<StructuredField>();
+            foreach (var item in keywordLines)
+            {
+                var key = item.Line;
+                var values = lines.Where(v => v != key && v.X > key.X && Number(v.Text) &&
+                    Math.Abs(Cy(v) - Cy(key)) <= Math.Max(7.0, Math.Max(key.Height, v.Height) * .72))
+                    .OrderBy(v => v.X).ToList();
+                if (values.Count == 0) continue;
+
+                var unit = lines.Where(v => v.X > key.X && Units.Contains((v.Text ?? "").Trim()) &&
+                    Math.Abs(Cy(v) - Cy(key)) <= Math.Max(8.0, Math.Max(key.Height, v.Height) * .85))
+                    .OrderBy(v => Math.Abs(Cy(v) - Cy(key))).FirstOrDefault();
+
+                var above = lines.Where(h => h.Y < key.Y && h.X > key.X && !Number(h.Text) &&
+                    MatchKeyword(h.Text, profile) == null && !Units.Contains((h.Text ?? "").Trim()) &&
+                    key.Y - h.Y < 100).ToList();
+                // Numeric headers such as 1/2/3 are valid headers too.
+                above.AddRange(lines.Where(h => h.Y < key.Y && h.X > key.X && Number(h.Text) && key.Y - h.Y < 100));
+                var headers = above.GroupBy(h => (int)(Cy(h) / 8)).OrderByDescending(g => g.Count())
+                    .Select(g => g.OrderBy(Cx).ToList()).FirstOrDefault() ?? new List<TextLine>();
+
+                var cells = new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var v in values)
+                {
+                    var h = headers.OrderBy(x => Math.Abs(Cx(x) - Cx(v))).FirstOrDefault();
+                    string column = h != null && Math.Abs(Cx(h) - Cx(v)) < 55 ? h.Text.Trim() : "Value" + (cells.Count + 1);
+                    if (!cells.ContainsKey(column)) cells[column] = RuleExtractor.NormalizeDigits(v.Text.Trim());
+                }
+                string section = "";
+                var title = lines.Where(t => t.Y < key.Y && t.X <= key.X + 20 && MatchKeyword(t.Text, profile) == null &&
+                    !Number(t.Text) && !Units.Contains((t.Text ?? "").Trim()) && key.Y - t.Y < 100)
+                    .OrderByDescending(t => t.Y).FirstOrDefault();
+                if (title != null) section = title.Text.Trim();
+
+                var field = new StructuredField { Section = section, Type = "TableRow", Key = key.Text.Trim(),
+                    Cells = cells, Values = cells.Values.ToList(), Unit = unit == null ? "" : unit.Text.Trim(),
+                    RawText = string.Join(" ", new[] { key.Text }.Concat(values.Select(v => v.Text)).Concat(unit == null ? new string[0] : new[] { unit.Text })),
+                    Confidence = new[] { key.Confidence }.Concat(values.Select(v => v.Confidence)).Min() };
+                measurementRows.Add(field);
+                consumed.Add(key); foreach (var v in values) consumed.Add(v); if (unit != null) consumed.Add(unit);
+            }
+
+            study.StructuredFields.AddRange(measurementRows);
+            study.Tables.AddRange(UltrasoundTableBuilder.Build(measurementRows));
+            foreach (var line in lines.Where(x => !consumed.Contains(x)))
                 study.Unassigned.Add(new UnassignedText { Text = line.Text.Trim(), Confidence = line.Confidence, X = line.X, Y = line.Y });
         }
     }
@@ -420,8 +470,13 @@ namespace AutoReport
     {
         private readonly IImageTextReader reader;
         private readonly RuleExtractor extractor;
+        private readonly ExtractionProfile profile;
         public AutoReportEngine(IImageTextReader reader, ExtractionProfile profile)
-        { this.reader = reader ?? throw new ArgumentNullException(nameof(reader)); extractor = new RuleExtractor(profile); }
+        {
+            this.reader = reader ?? throw new ArgumentNullException(nameof(reader));
+            this.profile = profile ?? throw new ArgumentNullException(nameof(profile));
+            extractor = new RuleExtractor(profile);
+        }
 
         // One call is ONE examination, never a batch of unrelated patients.
         public async Task<Study> ExtractAsync(string studyId, IEnumerable<string> images, CancellationToken token = default(CancellationToken))
@@ -443,10 +498,7 @@ namespace AutoReport
                     study.Sources.Add(page);
                     var pageObservations = extractor.Extract(page);
                     study.Observations.AddRange(pageObservations);
-                    var canonical = LayoutStructureExtractor.Extract(page);
-                    study.StructuredFields.AddRange(canonical);
-                    study.Tables.AddRange(UltrasoundTableBuilder.Build(canonical));
-                    EvidenceLayoutExtractor.Extract(page, study, canonical);
+                    KeywordGeometryExtractor.Extract(page, study, profile);
                 }
             }
             if (study.Sources.Count == 0) throw new InvalidOperationException("No source images were processed.");
